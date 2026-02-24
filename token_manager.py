@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class TokenManager:
     def __init__(self, config: Dict):
         self.token_endpoint = config.get('OSDU_TOKEN_ENDPOINT')
+        self.token_host = config.get('OSDU_TOKEN_HOST')  # For Host header bypass
         self.client_id = config.get('OSDU_CLIENT_ID')
         self.client_secret = config.get('OSDU_CLIENT_SECRET')
         self.refresh_token = config.get('OSDU_REFRESH_TOKEN', '')
@@ -90,10 +91,16 @@ class TokenManager:
             "refresh_token": self.refresh_token
         }
 
+        # Prepare headers with Host bypass for DNS resolution
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if self.token_host:
+            headers["Host"] = self.token_host
+            logger.info(f"Using Host header: {self.token_host} for IP endpoint")
+
         response = requests.post(
             self.token_endpoint,
             data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers=headers,
             verify=self.verify_ssl
         )
 
@@ -120,10 +127,16 @@ class TokenManager:
             "client_secret": self.client_secret
         }
 
+        # Prepare headers with Host bypass for DNS resolution
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if self.token_host:
+            headers["Host"] = self.token_host
+            logger.info(f"Using Host header: {self.token_host} for IP endpoint")
+
         response = requests.post(
             self.token_endpoint,
             data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            headers=headers,
             verify=self.verify_ssl
         )
 

@@ -16,6 +16,7 @@ class Config:
         
         # Token Configuration
         self.OSDU_TOKEN_ENDPOINT = os.getenv('OSDU_TOKEN_ENDPOINT')
+        self.OSDU_TOKEN_HOST = os.getenv('OSDU_TOKEN_HOST')  # Host header bypass
         self.OSDU_CLIENT_ID = os.getenv('OSDU_CLIENT_ID')
         self.OSDU_CLIENT_SECRET = os.getenv('OSDU_CLIENT_SECRET')
         self.OSDU_REFRESH_TOKEN = os.getenv('OSDU_REFRESH_TOKEN', '')
@@ -33,6 +34,7 @@ class Config:
             'OSDU_BASE_URL': self.OSDU_BASE_URL,
             'OSDU_PARTITION_ID': self.OSDU_PARTITION_ID,
             'OSDU_TOKEN_ENDPOINT': self.OSDU_TOKEN_ENDPOINT,
+            'OSDU_TOKEN_HOST': self.OSDU_TOKEN_HOST,
             'OSDU_CLIENT_ID': self.OSDU_CLIENT_ID,
             'OSDU_CLIENT_SECRET': self.OSDU_CLIENT_SECRET,
             'OSDU_REFRESH_TOKEN': self.OSDU_REFRESH_TOKEN,
