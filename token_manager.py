@@ -81,6 +81,8 @@ class TokenManager:
 
     def _request_with_refresh_token(self) -> str:
         """Request token using refresh token"""
+        logger.info(f"Requesting token with refresh_token from: {self.token_endpoint}")
+        
         payload = {
             "grant_type": "refresh_token",
             "client_id": self.client_id,
@@ -96,6 +98,8 @@ class TokenManager:
         )
 
         if response.status_code != 200:
+            logger.error(f"Refresh token request failed - Status: {response.status_code}")
+            logger.error(f"Response: {response.text}")
             raise Exception(f"Refresh token request failed: {response.text}")
 
         token_data = response.json()
@@ -108,6 +112,8 @@ class TokenManager:
 
     def _request_with_client_credentials(self) -> str:
         """Request token using client credentials"""
+        logger.info(f"Requesting token with client_credentials from: {self.token_endpoint}")
+        
         payload = {
             "grant_type": "client_credentials",
             "client_id": self.client_id,
@@ -122,6 +128,8 @@ class TokenManager:
         )
 
         if response.status_code != 200:
+            logger.error(f"Client credentials request failed - Status: {response.status_code}")
+            logger.error(f"Response: {response.text}")
             raise Exception(f"Client credentials failed: {response.text}")
 
         token_data = response.json()
