@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSDU Record Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container fade-in">
+        <h1>🛢️ OSDU Record Viewer</h1>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="🔍 Tìm kiếm domain hoặc entity..." id="searchInput">
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value">{{ domains|length }}</div>
+                <div class="stat-label">Domains</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ total_entities }}</div>
+                <div class="stat-label">Entities</div>
+            </div>
+        </div>
+        
+        <div class="domain-grid" id="domainGrid">
+            {% for domain_name, domain_info in domains.items() %}
+            <div class="domain-card card" onclick="window.location.href='/domain/{{ domain_name|urlencode }}'">
+                <div class="domain-title">
+                    {{ domain_info.icon }} {{ domain_name }}
+                </div>
+                <div class="domain-desc">{{ domain_info.description }}</div>
+                <div class="entity-count">{{ domain_info.entities|length }} entities</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const domainCards = document.querySelectorAll('.domain-card');
+            
+            domainCards.forEach(card => {
+                const title = card.querySelector('.domain-title').textContent.toLowerCase();
+                const desc = card.querySelector('.domain-desc').textContent.toLowerCase();
+                
+                if (title.includes(searchTerm) || desc.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+        
+        // Add fade-in animation delay for cards
+        document.querySelectorAll('.domain-card').forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('fade-in');
+        });
+    </script>
+</body>
+</html>

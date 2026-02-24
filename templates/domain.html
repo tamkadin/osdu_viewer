@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ domain_name }} - OSDU Entities</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container fade-in">
+        <div class="breadcrumb">
+            <a href="/">🏠 Home</a> / {{ domain_info.icon }} {{ domain_name }}
+        </div>
+        
+        <h1 class="page-title">{{ domain_info.icon }} {{ domain_name }}</h1>
+        <p>{{ domain_info.description }}</p>
+        
+        <div class="search-container">
+            <input type="text" class="search-input" placeholder="🔍 Tìm kiếm entity..." id="searchInput">
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value">{{ domain_info.entities|length }}</div>
+                <div class="stat-label">Entities</div>
+            </div>
+        </div>
+        
+        <div class="entity-grid" id="entityGrid">
+            {% for entity_name, entity_info in domain_info.entities.items() %}
+            <div class="entity-card card" onclick="window.location.href='/records/{{ domain_name|urlencode }}/{{ entity_name|urlencode }}'">
+                <div class="entity-name">{{ entity_name }}</div>
+                <div class="entity-desc">{{ entity_info.description }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <script>
+        // Search functionality
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const entityCards = document.querySelectorAll('.entity-card');
+            
+            entityCards.forEach(card => {
+                const name = card.querySelector('.entity-name').textContent.toLowerCase();
+                const desc = card.querySelector('.entity-desc').textContent.toLowerCase();
+                
+                if (name.includes(searchTerm) || desc.includes(searchTerm)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            
+            // Update stats
+            const visibleCards = document.querySelectorAll('.entity-card[style*="block"], .entity-card:not([style*="none"])').length;
+            document.querySelector('.stat-value').textContent = visibleCards;
+        });
+        
+        // Add fade-in animation delay for cards
+        document.querySelectorAll('.entity-card').forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('fade-in');
+        });
+    </script>
+</body>
+</html>

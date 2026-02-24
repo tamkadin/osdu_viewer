@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Detail - OSDU</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container fade-in">
+        <div class="breadcrumb">
+            <a href="/">🏠 Home</a> / 
+            <a href="javascript:history.back()">📋 Back to Records</a>
+        </div>
+        
+        <h1 class="page-title">📄 Record Detail</h1>
+        <p id="recordId" style="word-break: break-all; color: #6c757d;"></p>
+        
+        <div class="view-options">
+            <h3>👁️ Chế độ xem dữ liệu</h3>
+            <div class="option-buttons">
+                <button id="jsonViewBtn" class="btn btn-primary active" onclick="setViewMode('json')">
+                    📄 JSON View
+                </button>
+                <button id="csvViewBtn" class="btn" onclick="setViewMode('csv')">
+                    📊 CSV View
+                </button>
+                <button id="treeViewBtn" class="btn" onclick="setViewMode('tree')">
+                    🌳 Tree View
+                </button>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button class="btn btn-secondary" onclick="copyToClipboard()">📋 Copy JSON</button>
+            <button class="btn btn-success" onclick="downloadJson()">💾 Download JSON</button>
+            <button class="btn btn-info" onclick="downloadCsv()">📊 Download CSV</button>
+            <button class="btn" onclick="loadRecord()">🔄 Refresh</button>
+        </div>
+        
+        <div class="stats" id="recordStats" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-value" id="fieldCount">0</div>
+                <div class="stat-label">Fields</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="dataSize">0</div>
+                <div class="stat-label">Size (KB)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recordVersion">N/A</div>
+                <div class="stat-label">Version</div>
+            </div>
+        </div>
+        
+        <div id="recordContent" class="record-content">
+            <div class="loading">
+                <div class="spinner"></div>
+                Loading record details...
+            </div>
+        </div>
+        
+        <div id="csvContent" class="record-content" style="display: none;">
+            <!-- CSV table will be rendered here -->
+        </div>
+        
+        <div id="recordTree" class="record-content" style="display: none;">
+            <!-- Tree view will be rendered here -->
+        </div>
+    </div>
+
+    <script>
+        let recordData = null;
+        let currentViewMode = 'json'; // 'json', 'csv', 'tree'
+        
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            
+            // Update button states
+            document.getElementById('jsonViewBtn').classList.remove('active');
+            document.getElementById('csvViewBtn').classList.remove('active');
+            document.getElementById('treeViewBtn').classList.remove('active');
+            
+            document.getElementById(mode + 'ViewBtn').classList.add('active');
+            
+            if (recordData) {
+                displayRecord();
+            }
+        }
+        
+        async function loadRecord() {
+            const recordId = '{{ record_id }}';
+            document.getElementById('recordId').textContent = `ID: ${recordId}`;
+            
+            const recordContent = document.getElementById('recordContent');
+            recordContent.innerHTML = '<div class="loading"><div class="spinner"></div>Loading record details...</div>';
+            
+            try {
+                const response = await fetch('/api/record/' + encodeURIComponent(recordId));
+                const data = await response.json();
+                
+                if (data.error) {
+                    recordContent.innerHTML = `
+                        <div class="error">
+                            ❌ <strong>Error:</strong> ${data.error}
+                            <br><br>
+                            <details>
+                                <summary>🔧 Troubleshooting</summary>
+                                <p>This error occurred while trying to fetch record details from OSDU Storage API.</p>
+                                <p><strong>Possible causes:</strong></p>
+                                <ul>
+                                    <li>Record ID format may be incorrect</li>
+                                    <li>Storage API endpoint may have changed</li>
+                                    <li>Record may not exist or be accessible</li>
+                                    <li>Permissions issue</li>
+                                </ul>
+                                <p><strong>Debug tools:</strong></p>
+                                <a href="/api/debug/test-record-retrieval/${encodeURIComponent(recordId)}" target="_blank" class="btn">
+                                    🔍 Test Record Retrieval Strategies
+                                </a>
+                            </details>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                if (data.records && data.records.length > 0) {
+                    recordData = data.records[0];
+                    displayRecord();
+                    updateStats();
+                } else {
+                    recordContent.innerHTML = `
+                        <div class="error">
+                            ❌ <strong>Record not found</strong>
+                            <br><br>
+                            <p>No data returned for this record ID. The record may not exist or you may not have access to it.</p>
+                            <a href="/api/debug/test-record-retrieval/${encodeURIComponent(recordId)}" target="_blank" class="btn">
+                                🔍 Test Record Retrieval
+                            </a>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                recordContent.innerHTML = `
+                    <div class="error">
+                        ❌ <strong>Network Error:</strong> ${error.message}
+                        <br><br>
+                        <p>Failed to communicate with the server. Please check your connection and try again.</p>
+                        <button onclick="loadRecord()" class="btn">🔄 Retry</button>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayRecord() {
+            const recordContent = document.getElementById('recordContent');
+            const csvContent = document.getElementById('csvContent');
+            const recordTree = document.getElementById('recordTree');
+            
+            // Hide all views first
+            recordContent.style.display = 'none';
+            csvContent.style.display = 'none';
+            recordTree.style.display = 'none';
+            
+            if (currentViewMode === 'json') {
+                recordContent.style.display = 'block';
+                recordContent.innerHTML = '<pre>' + JSON.stringify(recordData, null, 2) + '</pre>';
+            } else if (currentViewMode === 'csv') {
+                csvContent.style.display = 'block';
+                renderCsvView(recordData, csvContent);
+            } else if (currentViewMode === 'tree') {
+                recordTree.style.display = 'block';
+                renderTreeView(recordData, recordTree);
+            }
+        }
+        
+        function renderCsvView(data, container) {
+            // Flatten the object for CSV display
+            function flattenObject(obj, prefix = '') {
+                const flattened = {};
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        const newKey = prefix ? `${prefix}.${key}` : key;
+                        if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+                            Object.assign(flattened, flattenObject(obj[key], newKey));
+                        } else {
+                            flattened[newKey] = Array.isArray(obj[key]) ? 
+                                JSON.stringify(obj[key]) : 
+                                (obj[key] === null ? '' : String(obj[key]));
+                        }
+                    }
+                }
+                return flattened;
+            }
+            
+            const flat = flattenObject(data);
+            const entries = Object.entries(flat);
+            
+            // Create table
+            const table = document.createElement('table');
+            table.className = 'csv-table';
+            
+            // Header
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            ['Field', 'Value'].forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                headerRow.appendChild(th);
+            });
+            
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Body
+            const tbody = document.createElement('tbody');
+            entries.forEach(([key, value]) => {
+                const row = document.createElement('tr');
+                
+                const keyCell = document.createElement('td');
+                keyCell.textContent = key;
+                keyCell.className = 'csv-key';
+                row.appendChild(keyCell);
+                
+                const valueCell = document.createElement('td');
+                valueCell.textContent = value;
+                valueCell.className = 'csv-value';
+                row.appendChild(valueCell);
+                
+                tbody.appendChild(row);
+            });
+            
+            table.appendChild(tbody);
+            
+            container.innerHTML = '';
+            container.appendChild(table);
+        }
+        
+        function renderTreeView(obj, container, level = 0) {
+            container.innerHTML = '';
+            const tree = document.createElement('div');
+            tree.className = 'json-tree';
+            
+            function renderNode(data, parent, key = null, depth = 0) {
+                const indent = '  '.repeat(depth);
+                
+                if (Array.isArray(data)) {
+                    const div = document.createElement('div');
+                    div.className = 'json-array';
+                    div.innerHTML = `${indent}<span class="json-key">${key || 'root'}</span>: [`;
+                    parent.appendChild(div);
+                    
+                    data.forEach((item, index) => {
+                        renderNode(item, parent, `[${index}]`, depth + 1);
+                    });
+                    
+                    const closeDiv = document.createElement('div');
+                    closeDiv.innerHTML = `${indent}]`;
+                    parent.appendChild(closeDiv);
+                    
+                } else if (typeof data === 'object' && data !== null) {
+                    if (key) {
+                        const div = document.createElement('div');
+                        div.className = 'json-object';
+                        div.innerHTML = `${indent}<span class="json-key">${key}</span>: {`;
+                        parent.appendChild(div);
+                    }
+                    
+                    Object.entries(data).forEach(([k, v]) => {
+                        renderNode(v, parent, k, key ? depth + 1 : depth);
+                    });
+                    
+                    if (key) {
+                        const closeDiv = document.createElement('div');
+                        closeDiv.innerHTML = `${indent}}`;
+                        parent.appendChild(closeDiv);
+                    }
+                    
+                } else {
+                    const div = document.createElement('div');
+                    div.className = 'json-value';
+                    const valueClass = typeof data === 'string' ? 'json-string' : 
+                                     typeof data === 'number' ? 'json-number' :
+                                     typeof data === 'boolean' ? 'json-boolean' : 'json-null';
+                    
+                    const displayValue = typeof data === 'string' ? `"${data}"` : String(data);
+                    div.innerHTML = `${indent}<span class="json-key">${key}</span>: <span class="${valueClass}">${displayValue}</span>`;
+                    parent.appendChild(div);
+                }
+            }
+            
+            renderNode(recordData, tree);
+            container.appendChild(tree);
+        }
+        
+        function updateStats() {
+            if (!recordData) return;
+            
+            const statsContainer = document.getElementById('recordStats');
+            statsContainer.style.display = 'grid';
+            
+            // Count fields recursively
+            function countFields(obj) {
+                if (typeof obj !== 'object' || obj === null) return 0;
+                
+                let count = 0;
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        count++;
+                        if (typeof obj[key] === 'object' && obj[key] !== null) {
+                            count += countFields(obj[key]);
+                        }
+                    }
+                }
+                return count;
+            }
+            
+            const fieldCount = countFields(recordData);
+            const dataSize = new Blob([JSON.stringify(recordData)]).size / 1024;
+            const version = recordData.version || recordData.meta?.version || 'N/A';
+            
+            document.getElementById('fieldCount').textContent = fieldCount;
+            document.getElementById('dataSize').textContent = Math.round(dataSize * 100) / 100;
+            document.getElementById('recordVersion').textContent = version;
+        }
+        
+        function toggleFormat() {
+            // Legacy function - now using setViewMode
+            const modes = ['json', 'csv', 'tree'];
+            const currentIndex = modes.indexOf(currentViewMode);
+            const nextIndex = (currentIndex + 1) % modes.length;
+            setViewMode(modes[nextIndex]);
+        }
+        
+        function copyToClipboard() {
+            if (recordData) {
+                navigator.clipboard.writeText(JSON.stringify(recordData, null, 2))
+                    .then(() => {
+                        showToast('✅ Record copied to clipboard!', 'success');
+                    })
+                    .catch(() => {
+                        showToast('❌ Failed to copy', 'error');
+                    });
+            }
+        }
+        
+        function downloadJson() {
+            if (recordData) {
+                const blob = new Blob([JSON.stringify(recordData, null, 2)], {type: 'application/json'});
+                downloadBlob(blob, recordData.id.replace(/[^a-zA-Z0-9]/g, '_') + '.json');
+            }
+        }
+        
+        function downloadCsv() {
+            if (!recordData) return;
+            
+            // Flatten the object for CSV
+            function flattenObject(obj, prefix = '') {
+                const flattened = {};
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        const newKey = prefix ? `${prefix}.${key}` : key;
+                        if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+                            Object.assign(flattened, flattenObject(obj[key], newKey));
+                        } else {
+                            flattened[newKey] = Array.isArray(obj[key]) ? JSON.stringify(obj[key]) : obj[key];
+                        }
+                    }
+                }
+                return flattened;
+            }
+            
+            const flat = flattenObject(recordData);
+            const headers = Object.keys(flat);
+            const values = headers.map(header => flat[header] || '');
+            
+            const csv = [headers.join(','), values.join(',')].join('\n');
+            const blob = new Blob([csv], {type: 'text/csv'});
+            downloadBlob(blob, recordData.id.replace(/[^a-zA-Z0-9]/g, '_') + '.csv');
+        }
+        
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast(`✅ Downloaded: ${filename}`, 'success');
+        }
+        
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                background: ${type === 'success' ? '#27ae60' : type === 'error' ? '#e74c3c' : '#3498db'};
+                color: white;
+                border-radius: 6px;
+                z-index: 9999;
+                animation: fadeIn 0.3s ease;
+            `;
+            
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'fadeOut 0.3s ease forwards';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 3000);
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'c' && e.ctrlKey) {
+                e.preventDefault();
+                copyToClipboard();
+            } else if (e.key === 's' && e.ctrlKey) {
+                e.preventDefault();
+                downloadJson();
+            } else if (e.key === 't' && e.ctrlKey) {
+                e.preventDefault();
+                toggleFormat();
+            }
+        });
+        
+        // Load record on page load
+        loadRecord();
+    </script>
+    
+    <style>
+        .json-tree {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .json-key {
+            color: #d73a49;
+            font-weight: bold;
+        }
+        
+        .json-string {
+            color: #032f62;
+        }
+        
+        .json-number {
+            color: #005cc5;
+        }
+        
+        .json-boolean {
+            color: #d73a49;
+        }
+        
+        .json-null {
+            color: #6f42c1;
+        }
+        
+        .json-object, .json-array {
+            color: #24292e;
+        }
+        
+        .toast {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateY(-20px); }
+        }
+        
+        details {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            background: #f8f9fa;
+        }
+        
+        summary {
+            cursor: pointer;
+            padding: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        summary:hover {
+            color: #007bff;
+        }
+        
+        details[open] summary {
+            border-bottom: 1px solid #dee2e6;
+            margin-bottom: 10px;
+        }
+        
+        details ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        
+        details li {
+            margin: 5px 0;
+        }
+        
+        .view-options {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .view-options h3 {
+            margin: 0 0 15px 0;
+            color: #495057;
+            font-size: 1.1em;
+        }
+        
+        .option-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .csv-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .csv-table th {
+            background: #007bff;
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .csv-table td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: top;
+        }
+        
+        .csv-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .csv-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .csv-key {
+            font-weight: 600;
+            color: #495057;
+            width: 30%;
+            word-break: break-word;
+        }
+        
+        .csv-value {
+            color: #6c757d;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-word;
+        }
+    </style>
+</body>
+</html>
