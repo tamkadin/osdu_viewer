@@ -12,6 +12,7 @@ class Config:
         
         # OSDU Configuration
         self.OSDU_BASE_URL = os.getenv('OSDU_BASE_URL', 'http://osdu.vts.cloud')
+        self.OSDU_BASE_HOST = os.getenv('OSDU_BASE_HOST')  # Host header bypass
         self.OSDU_PARTITION_ID = os.getenv('OSDU_PARTITION_ID', 'osdu')
         
         # Token Configuration
@@ -32,6 +33,7 @@ class Config:
         """Convert config to dictionary for TokenManager"""
         return {
             'OSDU_BASE_URL': self.OSDU_BASE_URL,
+            'OSDU_BASE_HOST': self.OSDU_BASE_HOST,
             'OSDU_PARTITION_ID': self.OSDU_PARTITION_ID,
             'OSDU_TOKEN_ENDPOINT': self.OSDU_TOKEN_ENDPOINT,
             'OSDU_TOKEN_HOST': self.OSDU_TOKEN_HOST,

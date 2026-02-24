@@ -38,20 +38,29 @@ class OSDUService:
     
     def __init__(self):
         self.base_url = config.OSDU_BASE_URL
+        self.base_host = config.OSDU_BASE_HOST  # Host header bypass
         self.partition_id = config.OSDU_PARTITION_ID
 
     def get_headers(self) -> Dict[str, str]:
-        """Get headers with access token"""
+        """Get headers with access token and Host bypass"""
         if not token_manager:
             raise Exception("TokenManager not initialized")
         
         try:
             token = token_manager.get_token()
-            return {
+            headers = {
                 "Authorization": f"Bearer {token}",
                 "data-partition-id": self.partition_id,
                 "Content-Type": "application/json"
             }
+            
+            # Add Host header for DNS bypass on Koyeb
+            if self.base_host:
+                headers["Host"] = self.base_host
+                logger.debug(f"Using Host header: {self.base_host} for OSDU API")
+                
+            return headers
+            
         except Exception as e:
             logger.error(f"Failed to get token: {e}")
             raise Exception(f"Authentication failed: {e}")
@@ -501,7 +510,7 @@ def api_debug_test_search():
         results = {}
         
         for kind in test_kinds:
-            url = f"{config.OSDU_BASE_URL}/api/search/v2/query"
+            url = f"{osdu_service.base_url}/api/search/v2/query"
             
             payload = {
                 "kind": kind,
@@ -702,7 +711,7 @@ def api_debug_test_all_strategies():
 def api_debug_simple_search():
     """Very simple search test"""
     try:
-        url = f"{config.OSDU_BASE_URL}/api/search/v2/query"
+        url = f"{osdu_service.base_url}/api/search/v2/query"
         
         # Try general query first
         payload = {
