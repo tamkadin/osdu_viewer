@@ -11,7 +11,7 @@ class Config:
         load_dotenv(env_path)
         
         # OSDU Configuration
-        self.OSDU_BASE_URL = os.getenv('OSDU_BASE_URL', 'http://osdu.vts.cloud')
+        self.OSDU_BASE_URL = os.getenv('OSDU_BASE_URL', 'http://osdu.huulinhcvp.click')
         self.OSDU_BASE_HOST = os.getenv('OSDU_BASE_HOST')  # Host header bypass
         self.OSDU_PARTITION_ID = os.getenv('OSDU_PARTITION_ID', 'osdu')
         

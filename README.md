@@ -37,11 +37,14 @@ nano .env
 
 3. **Điền thông tin OSDU trong .env:**
 ```env
-OSDU_BASE_URL=http://osdu.vts.cloud
+OSDU_BASE_URL=http://osdu.huulinhcvp.click
+OSDU_BASE_HOST=osdu.huulinhcvp.click
 OSDU_PARTITION_ID=osdu
-OSDU_TOKEN_ENDPOINT=https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
-OSDU_CLIENT_ID=your_client_id
+OSDU_TOKEN_ENDPOINT=http://keycloak.osdu.huulinhcvp.click/realms/osdu/protocol/openid-connect/token
+OSDU_TOKEN_HOST=keycloak.osdu.huulinhcvp.click
+OSDU_CLIENT_ID=datafier
 OSDU_CLIENT_SECRET=your_client_secret
+OSDU_VERIFY_SSL=False
 ```
 
 ## 🚀 Chạy ứng dụng
