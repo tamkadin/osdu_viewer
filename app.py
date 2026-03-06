@@ -27,7 +27,9 @@ app = Flask(__name__)
 try:
     config.validate()
     token_manager = TokenManager(config.to_dict())
-    logger.info("TokenManager initialized successfully")
+    token_manager.prewarm()
+    token_manager.start_background_refresh(interval=3000)
+    logger.info("TokenManager initialized with background refresh")
 except Exception as e:
     logger.error(f"Failed to initialize TokenManager: {e}")
     token_manager = None
@@ -41,7 +43,7 @@ class OSDUService:
         self.base_host = config.OSDU_BASE_HOST  # Host header bypass
         self.partition_id = config.OSDU_PARTITION_ID
 
-    def get_headers(self) -> Dict[str, str]:
+    def get_headers(self, accept_json: bool = True) -> Dict[str, str]:
         """Get headers with access token and Host bypass"""
         if not token_manager:
             raise Exception("TokenManager not initialized")
@@ -54,7 +56,9 @@ class OSDUService:
                 "Content-Type": "application/json"
             }
             
-            # Add Host header for DNS bypass on Koyeb
+            if accept_json:
+                headers["Accept"] = "application/json"
+            
             if self.base_host:
                 headers["Host"] = self.base_host
                 logger.debug(f"Using Host header: {self.base_host} for OSDU API")
@@ -334,6 +338,105 @@ class OSDUService:
             logger.warning(f"Search-based record retrieval failed: {e}")
             return {"error": str(e)}
 
+    def delete_record(self, record_id: str) -> Dict:
+        """Soft delete a record using Storage API"""
+        url = f"{self.base_url}/api/storage/v2/records/{record_id}:delete"
+        
+        try:
+            logger.info(f"Deleting record: {record_id}")
+            response = requests.post(url, headers=self.get_headers(), timeout=600)
+            response.raise_for_status()
+            
+            logger.info(f"Successfully deleted record: {record_id}")
+            return {"success": True, "message": "Record deleted successfully"}
+            
+        except requests.exceptions.HTTPError as e:
+            error_detail = ""
+            try:
+                error_detail = response.text[:500]
+            except:
+                error_detail = "Could not read response"
+            
+            logger.error(f"HTTP error deleting record: {e}")
+            logger.error(f"Status: {response.status_code}")
+            logger.error(f"Response: {error_detail}")
+            
+            return {"success": False, "error": f"Delete failed: {response.status_code} - {error_detail[:100]}"}
+            
+        except requests.exceptions.Timeout:
+            logger.error(f"Timeout deleting record: {record_id}")
+            return {"success": False, "error": "Request timeout after 10 minutes"}
+            
+        except Exception as e:
+            logger.error(f"Error deleting record: {e}")
+            return {"success": False, "error": str(e)}
+
+    def bulk_delete_records(self, record_ids: List[str]) -> Dict:
+        """Bulk soft delete multiple records by looping individual delete API"""
+        logger.info(f"Bulk deleting {len(record_ids)} records (individual delete loop)")
+        
+        success_count = 0
+        failed_count = 0
+        errors = []
+        
+        for record_id in record_ids:
+            url = f"{self.base_url}/api/storage/v2/records/{record_id}:delete"
+            
+            try:
+                logger.info(f"Deleting record {success_count + failed_count + 1}/{len(record_ids)}: {record_id}")
+                response = requests.post(url, headers=self.get_headers(), timeout=600)
+                response.raise_for_status()
+                success_count += 1
+                logger.info(f"Successfully deleted: {record_id}")
+                
+            except requests.exceptions.HTTPError as e:
+                failed_count += 1
+                error_detail = ""
+                try:
+                    error_detail = response.text[:200]
+                except:
+                    error_detail = str(e)
+                
+                error_msg = f"{record_id}: {response.status_code} - {error_detail[:100]}"
+                errors.append(error_msg)
+                logger.error(f"Failed to delete {record_id}: {error_msg}")
+                
+            except requests.exceptions.Timeout:
+                failed_count += 1
+                error_msg = f"{record_id}: Timeout after 10 minutes"
+                errors.append(error_msg)
+                logger.error(f"Timeout deleting {record_id}")
+                
+            except Exception as e:
+                failed_count += 1
+                error_msg = f"{record_id}: {str(e)}"
+                errors.append(error_msg)
+                logger.error(f"Error deleting {record_id}: {e}")
+        
+        logger.info(f"Bulk delete completed: {success_count} succeeded, {failed_count} failed")
+        
+        if failed_count == 0:
+            return {
+                "success": True,
+                "message": f"Successfully deleted all {success_count} records",
+                "count": success_count,
+                "failed_count": 0
+            }
+        elif success_count > 0:
+            return {
+                "success": True,
+                "message": f"Deleted {success_count}/{len(record_ids)} records. {failed_count} failed.",
+                "count": success_count,
+                "failed_count": failed_count,
+                "errors": errors[:10]
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Failed to delete all {failed_count} records",
+                "errors": errors[:10]
+            }
+
 
 # Initialize OSDU Service
 osdu_service = OSDUService()
@@ -469,6 +572,48 @@ def api_record_detail(record_id):
     except Exception as e:
         logger.error(f"Error in api_record_detail: {e}")
         return jsonify({"error": str(e), "records": []}), 500
+
+
+@app.route('/api/delete-record/<path:record_id>', methods=['POST'])
+def api_delete_record(record_id):
+    """API endpoint to delete a record (soft delete)"""
+    record_id = unquote(record_id)
+    
+    try:
+        result = osdu_service.delete_record(record_id)
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+        
+    except Exception as e:
+        logger.error(f"Error in api_delete_record: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/bulk-delete-records', methods=['POST'])
+def api_bulk_delete_records():
+    """API endpoint to bulk delete multiple records (soft delete)"""
+    try:
+        data = request.get_json()
+        record_ids = data.get('record_ids', [])
+        
+        if not record_ids:
+            return jsonify({"success": False, "error": "No record IDs provided"}), 400
+        
+        if len(record_ids) > 100:
+            return jsonify({"success": False, "error": "Cannot delete more than 100 records at once"}), 400
+        
+        result = osdu_service.bulk_delete_records(record_ids)
+        
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+        
+    except Exception as e:
+        logger.error(f"Error in api_bulk_delete_records: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/health')

@@ -25,7 +25,10 @@
             </select>
             <button class="btn btn-primary" onclick="loadRecords()">🔄 Reload</button>
             <button class="btn" onclick="exportJSON()">💾 Export JSON</button>
+            <button class="btn btn-secondary" onclick="toggleSelectAll()" id="selectAllBtn" style="display:none;">☑️ Select All</button>
+            <button class="btn btn-danger" onclick="deleteSelected()" id="deleteSelectedBtn" style="display:none; background:#dc3545;">🗑️ Delete Selected</button>
             <span id="totalCount" class="stat-label"></span>
+            <span id="selectedCount" class="stat-label" style="display:none; color:#dc3545; font-weight:bold;"></span>
         </div>
         
         <div class="stats" id="statsContainer" style="display: none;">
@@ -54,10 +57,15 @@
         let currentLimit = 50;
         let totalCount = 0;
         let allRecords = [];
+        let selectedRecords = new Set();
+        let selectAllState = false;
         
         async function loadRecords(offset = 0) {
             currentOffset = offset;
             currentLimit = parseInt(document.getElementById('limitInput').value) || 50;
+            
+            selectedRecords.clear();
+            selectAllState = false;
             
             const recordList = document.getElementById('recordList');
             recordList.innerHTML = '<div class="loading"><div class="spinner"></div>Loading records...</div>';
@@ -88,6 +96,8 @@
                 
                 if (allRecords.length === 0) {
                     recordList.innerHTML = '<div class="loading">📭 No records found</div>';
+                    document.getElementById('selectAllBtn').style.display = 'none';
+                    document.getElementById('deleteSelectedBtn').style.display = 'none';
                     return;
                 }
                 
@@ -142,17 +152,35 @@
             
             recordList.innerHTML = '';
             
+            document.getElementById('selectAllBtn').style.display = 'inline-block';
+            document.getElementById('deleteSelectedBtn').style.display = 'inline-block';
+            updateSelectedCount();
+            
             records.forEach((record, index) => {
                 const div = document.createElement('div');
                 div.className = 'record-item card';
                 div.style.animationDelay = `${index * 0.05}s`;
                 div.classList.add('fade-in');
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'record-checkbox';
+                checkbox.checked = selectedRecords.has(record.id);
+                checkbox.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleRecordSelection(record.id);
+                };
+                checkbox.style.cssText = 'position:absolute; top:10px; left:10px; width:20px; height:20px; cursor:pointer; z-index:10;';
+                
+                div.style.position = 'relative';
+                div.style.paddingLeft = '40px';
                 div.onclick = () => viewRecord(record.id);
+                div.appendChild(checkbox);
                 
                 const displayName = getDisplayName(record, '{{ entity_name }}');
                 
+                const contentDiv = document.createElement('div');
                 if (fieldsSelect === 'basic') {
-                    // Show all data as preview
                     let jsonPreview = '';
                     if (record.data && Object.keys(record.data).length > 0) {
                         const previewData = {};
@@ -163,21 +191,137 @@
                         jsonPreview = `<div class="record-preview"><pre>${JSON.stringify(previewData, null, 2)}</pre></div>`;
                     }
                     
-                    div.innerHTML = `
+                    contentDiv.innerHTML = `
                         <div class="record-name">📄 ${displayName}</div>
                         <div class="record-kind-small">${record.kind || ''}</div>
                         ${jsonPreview}
                     `;
                 } else {
-                    // Simple display with just name
-                    div.innerHTML = `
+                    contentDiv.innerHTML = `
                         <div class="record-name-large">📄 ${displayName}</div>
                         <div class="record-subtitle">Click để xem chi tiết</div>
                     `;
                 }
                 
+                div.appendChild(contentDiv);
                 recordList.appendChild(div);
             });
+        }
+        
+        function toggleRecordSelection(recordId) {
+            if (selectedRecords.has(recordId)) {
+                selectedRecords.delete(recordId);
+            } else {
+                selectedRecords.add(recordId);
+            }
+            updateSelectedCount();
+        }
+        
+        function toggleSelectAll() {
+            selectAllState = !selectAllState;
+            
+            if (selectAllState) {
+                allRecords.forEach(record => selectedRecords.add(record.id));
+                document.getElementById('selectAllBtn').innerHTML = '☐ Deselect All';
+            } else {
+                selectedRecords.clear();
+                document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
+            }
+            
+            document.querySelectorAll('.record-checkbox').forEach((checkbox, index) => {
+                checkbox.checked = selectAllState;
+            });
+            
+            updateSelectedCount();
+        }
+        
+        function updateSelectedCount() {
+            const count = selectedRecords.size;
+            const countEl = document.getElementById('selectedCount');
+            
+            if (count > 0) {
+                countEl.textContent = `Selected: ${count}`;
+                countEl.style.display = 'inline';
+            } else {
+                countEl.style.display = 'none';
+            }
+        }
+        
+        async function deleteSelected() {
+            if (selectedRecords.size === 0) {
+                alert('⚠️ Please select at least one record to delete');
+                return;
+            }
+            
+            const recordIds = Array.from(selectedRecords);
+            
+            if (!confirm(`⚠️ Are you sure you want to delete ${recordIds.length} record(s)?\n\nThis will perform a soft delete (individual loop). Records may be recoverable depending on your OSDU configuration.\n\nNote: Each record will be deleted individually. This may take time if the server is slow. Please be patient.`)) {
+                return;
+            }
+            
+            const deleteBtn = document.getElementById('deleteSelectedBtn');
+            const originalText = deleteBtn.innerHTML;
+            deleteBtn.disabled = true;
+            
+            let processed = 0;
+            const updateProgress = () => {
+                deleteBtn.innerHTML = `⏳ Deleting ${processed}/${recordIds.length}...`;
+            };
+            updateProgress();
+            
+            const progressInterval = setInterval(() => {
+                processed = Math.min(processed + 1, recordIds.length);
+                updateProgress();
+            }, 2000);
+            
+            try {
+                const response = await fetch('/api/bulk-delete-records', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ record_ids: recordIds })
+                });
+                
+                clearInterval(progressInterval);
+                const result = await response.json();
+                
+                if (result.success && result.failed_count === 0) {
+                    alert(`✅ Successfully deleted all ${result.count} record(s)!`);
+                    selectedRecords.clear();
+                    selectAllState = false;
+                    document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
+                    deleteBtn.innerHTML = originalText;
+                    deleteBtn.disabled = false;
+                    loadRecords(currentOffset);
+                } else if (result.success && result.failed_count > 0) {
+                    let msg = `⚠️ Partial success:\n✅ Deleted: ${result.count}\n❌ Failed: ${result.failed_count}`;
+                    if (result.errors && result.errors.length > 0) {
+                        msg += '\n\nFirst errors:\n' + result.errors.slice(0, 3).join('\n');
+                    }
+                    alert(msg);
+                    selectedRecords.clear();
+                    selectAllState = false;
+                    document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
+                    deleteBtn.innerHTML = originalText;
+                    deleteBtn.disabled = false;
+                    loadRecords(currentOffset);
+                } else {
+                    let errorMsg = '❌ Delete failed: ' + (result.error || 'Unknown error');
+                    if (result.errors && result.errors.length > 0) {
+                        errorMsg += '\n\nErrors:\n' + result.errors.slice(0, 3).join('\n');
+                    }
+                    alert(errorMsg);
+                    deleteBtn.disabled = false;
+                    deleteBtn.innerHTML = originalText;
+                }
+                
+            } catch (error) {
+                clearInterval(progressInterval);
+                alert('❌ Network error: ' + error.message);
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = originalText;
+            }
         }
         
         function updatePagination() {

@@ -4,6 +4,7 @@ import time
 import requests
 import json
 import os
+import threading
 from typing import Optional, Dict
 
 logger = logging.getLogger(__name__)
@@ -12,32 +13,30 @@ logger = logging.getLogger(__name__)
 class TokenManager:
     def __init__(self, config: Dict):
         self.token_endpoint = config.get('OSDU_TOKEN_ENDPOINT')
-        self.token_host = config.get('OSDU_TOKEN_HOST')  # For Host header bypass
+        self.token_host = config.get('OSDU_TOKEN_HOST')
         self.client_id = config.get('OSDU_CLIENT_ID')
         self.client_secret = config.get('OSDU_CLIENT_SECRET')
         self.refresh_token = config.get('OSDU_REFRESH_TOKEN', '')
         self.verify_ssl = config.get('OSDU_VERIFY_SSL', 'False') == 'True'
         
-        # Cache token in memory
         self._cached_token = None
         self._token_expiry = 0
-        
-        # Cache file for persistent storage
         self._cache_file = os.path.join(os.path.dirname(__file__), '.token_cache')
+        self._lock = threading.Lock()
+        self._refresh_thread = None
+        self._stop_refresh = False
 
     def get_token(self) -> str:
         """Get valid access token, refresh if needed"""
-        # Check memory cache first
-        if self._cached_token and time.time() < self._token_expiry - 300:  # 5min buffer
-            return self._cached_token
-            
-        # Check file cache
-        if self._load_from_cache():
-            if time.time() < self._token_expiry - 300:
+        with self._lock:
+            if self._cached_token and time.time() < self._token_expiry - 300:
                 return self._cached_token
-        
-        # Request new token
-        return self._request_new_token()
+                
+            if self._load_from_cache():
+                if time.time() < self._token_expiry - 300:
+                    return self._cached_token
+            
+            return self._request_new_token()
 
     def _load_from_cache(self) -> bool:
         """Load token from cache file"""
@@ -178,3 +177,52 @@ class TokenManager:
         """Check if current token is valid"""
         return (self._cached_token and 
                 time.time() < self._token_expiry - 300)
+
+    def start_background_refresh(self, interval: int = 3000):
+        """Start background thread to refresh token periodically"""
+        if self._refresh_thread and self._refresh_thread.is_alive():
+            return
+        
+        self._stop_refresh = False
+        self._refresh_thread = threading.Thread(
+            target=self._background_refresh_loop,
+            args=(interval,),
+            daemon=True
+        )
+        self._refresh_thread.start()
+        logger.info(f"Started background token refresh (interval: {interval}s)")
+
+    def _background_refresh_loop(self, interval: int):
+        """Background loop to refresh token"""
+        while not self._stop_refresh:
+            try:
+                with self._lock:
+                    if not self._cached_token or time.time() >= self._token_expiry - 600:
+                        logger.info("Background refresh: requesting new token")
+                        self._request_new_token()
+            except Exception as e:
+                logger.error(f"Background refresh failed: {e}")
+            
+            for _ in range(interval):
+                if self._stop_refresh:
+                    break
+                time.sleep(1)
+
+    def stop_background_refresh(self):
+        """Stop background refresh thread"""
+        self._stop_refresh = True
+        if self._refresh_thread:
+            self._refresh_thread.join(timeout=2)
+
+    def prewarm(self):
+        """Pre-fetch token in background thread"""
+        def _fetch():
+            try:
+                logger.info("Pre-warming token...")
+                self.get_token()
+                logger.info("Token pre-warmed successfully")
+            except Exception as e:
+                logger.error(f"Token pre-warm failed: {e}")
+        
+        thread = threading.Thread(target=_fetch, daemon=True)
+        thread.start()
