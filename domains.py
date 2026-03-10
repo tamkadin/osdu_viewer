@@ -11,11 +11,11 @@ DOMAINS = {
                 "description": "Lưu vực trầm tích",
                 "fields": ["BasinName", "Country", "Province"]
             },
-            "Block": {
-                "kind": "osdu:wks:master-data--Block:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Block:*"],
+            "GeopoliticalEntity": {
+                "kind": "osdu:wks:master-data--GeopoliticalEntity:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--GeopoliticalEntity:*"],
                 "description": "Khối thăm dò",
-                "fields": ["BlockName", "Country", "Operator"]
+                "fields": ["geopoliticalentityName", "Country", "Operator"]
             },
             "Field": {
                 "kind": "osdu:wks:master-data--Field:*",
