@@ -14,8 +14,8 @@ DOMAINS = {
             "GeopoliticalEntity": {
                 "kind": "osdu:wks:master-data--GeopoliticalEntity:*",
                 "kind_alternatives": ["osdu:ddms-wellbore:master-data--GeopoliticalEntity:*"],
-                "description": "Khối thăm dò",
-                "fields": ["geopoliticalentityName", "Country", "Operator"]
+                "description": "Đơn vị địa chính trị",
+                "fields": ["GeoPoliticalEntityName", "Name", "GeopoliticalEntityType"]
             },
             "Field": {
                 "kind": "osdu:wks:master-data--Field:*",
@@ -40,12 +40,6 @@ DOMAINS = {
                 "kind_alternatives": ["osdu:ddms-wellbore:master-data--Wellbore:*"],
                 "description": "Thân giếng",
                 "fields": ["WellboreName", "WellID", "FinalTotalDepth"]
-            },
-            "GeopoliticalEntity": {
-                "kind": "osdu:wks:master-data--GeopoliticalEntity:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--GeopoliticalEntity:*"],
-                "description": "Đơn vị địa chính trị",
-                "fields": ["Name", "GeopoliticalEntityType"]
             },
             "Organisation": {
                 "kind": "osdu:wks:master-data--Organisation:*",

@@ -112,37 +112,55 @@
         function getDisplayName(record, entityName) {
             if (!record.data) return record.id;
             
-            // Define name fields for each entity type
-            const nameFields = {
-                'Basin': ['BasinName', 'Name'],
-                'GeologicFeature': ['GeologicFeatureName', 'Name'],
-                'Field': ['FieldName', 'Name'],
-                'IntervalSet': ['IntervalSetName', 'Name'],
-                'Organization': ['OrganizationName', 'Name'],
-                'ReferenceWellbore': ['WellboreName', 'Name'],
-                'Well': ['WellName', 'Name'],
-                'Wellbore': ['WellboreName', 'Name'],
-                'WellLog': ['WellLogName', 'Name'],
-                'WellTrajectory': ['WellTrajectoryName', 'Name'],
-                'WorkProduct': ['WorkProductName', 'Name'],
-                'WorkProductComponent': ['WorkProductComponentName', 'Name']
-            };
+            // Helper function to extract nested properties like "VirtualProperties.DefaultName"
+            function getNestedProperty(obj, path) {
+                return path.split('.').reduce((current, part) => 
+                    current && typeof current === 'object' ? current[part] : null, obj);
+            }
             
-            const fields = nameFields[entityName] || ['Name', 'name', 'title', 'Title'];
+            // 1. Try OSDU standard VirtualProperties.DefaultName first
+            const virtualName = getNestedProperty(record.data, 'VirtualProperties.DefaultName');
+            if (virtualName && typeof virtualName === 'string' && virtualName.length > 0) {
+                return virtualName;
+            }
             
-            for (let field of fields) {
-                if (record.data[field]) {
+            // 2. Try pattern-based detection: {EntityType}Name
+            // e.g., "Basin" -> "BasinName", "Field" -> "FieldName"
+            if (entityName) {
+                const patternField = `${entityName}Name`;
+                if (record.data[patternField] && typeof record.data[patternField] === 'string') {
+                    return record.data[patternField];
+                }
+            }
+            
+            // 3. Try common name field variations ending with "Name"
+            const nameFieldCandidates = Object.keys(record.data).filter(key => 
+                key.endsWith('Name') && typeof record.data[key] === 'string' && record.data[key].length > 0
+            );
+            if (nameFieldCandidates.length > 0) {
+                return record.data[nameFieldCandidates[0]];
+            }
+            
+            // 4. Try generic name fields
+            const genericFields = ['Name', 'name', 'Title', 'title', 'Label', 'label'];
+            for (let field of genericFields) {
+                if (record.data[field] && typeof record.data[field] === 'string' && record.data[field].length > 0) {
                     return record.data[field];
                 }
             }
             
-            // Fallback: try first string field
+            // 5. Fallback: try first non-system string field (skip fields starting with underscore or containing dates)
+            const skipPatterns = /^_|Date$|CreatedAt|UpdatedAt|Timestamp|Version|^id$/i;
             for (let key in record.data) {
-                if (typeof record.data[key] === 'string' && record.data[key].length > 0) {
+                if (!skipPatterns.test(key) && 
+                    typeof record.data[key] === 'string' && 
+                    record.data[key].length > 0 &&
+                    record.data[key].length < 100) { // Skip very long strings (likely descriptions)
                     return record.data[key];
                 }
             }
             
+            // 6. Last resort: extract ID suffix
             return record.id.split(':').pop() || record.id;
         }
         
