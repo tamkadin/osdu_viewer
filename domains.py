@@ -2,20 +2,20 @@
 
 DOMAINS = {
     "General Data": {
-        "description": "Dữ liệu địa chất và địa lý cơ bản",
+        "description": "Master data được nạp bởi general_data_ingestion_pipeline",
         "icon": "🏔️",
         "entities": {
+            "Agreement": {
+                "kind": "osdu:wks:master-data--Agreement:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Agreement:*"],
+                "description": "Thỏa thuận / hợp đồng",
+                "fields": ["AgreementName", "AgreementType", "EffectiveDate"]
+            },
             "Basin": {
                 "kind": "osdu:wks:master-data--Basin:*",
                 "kind_alternatives": ["osdu:ddms-wellbore:master-data--Basin:*"],
                 "description": "Lưu vực trầm tích",
                 "fields": ["BasinName", "Country", "Province"]
-            },
-            "GeopoliticalEntity": {
-                "kind": "osdu:wks:master-data--GeopoliticalEntity:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--GeopoliticalEntity:*"],
-                "description": "Đơn vị địa chính trị",
-                "fields": ["GeoPoliticalEntityName", "Name", "GeopoliticalEntityType"]
             },
             "Field": {
                 "kind": "osdu:wks:master-data--Field:*",
@@ -23,174 +23,118 @@ DOMAINS = {
                 "description": "Mỏ dầu khí",
                 "fields": ["FieldName", "Country", "DiscoveryDate"]
             },
-            "Reservoir": {
-                "kind": "osdu:wks:master-data--Reservoir:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Reservoir:*"],
-                "description": "Tầng chứa",
-                "fields": ["ReservoirName", "FieldID", "Formation"]
-            },
-            "Well": {
-                "kind": "osdu:wks:master-data--Well:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Well:*"],
-                "description": "Giếng khoan",
-                "fields": ["WellName", "WellType", "SpudDate"]
-            },
-            "Wellbore": {
-                "kind": "osdu:wks:master-data--Wellbore:*",
-                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Wellbore:*"],
-                "description": "Thân giếng",
-                "fields": ["WellboreName", "WellID", "FinalTotalDepth"]
+            "GeopoliticalEntity": {
+                "kind": "osdu:wks:master-data--GeopoliticalEntity:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--GeopoliticalEntity:*"],
+                "description": "Đơn vị địa chính trị",
+                "fields": ["GeoPoliticalEntityName", "Name", "GeopoliticalEntityType"]
             },
             "Organisation": {
                 "kind": "osdu:wks:master-data--Organisation:*",
                 "kind_alternatives": ["osdu:ddms-wellbore:master-data--Organisation:*"],
                 "description": "Tổ chức, công ty",
                 "fields": ["OrganisationName", "OrganisationType"]
+            },
+            "Reservoir": {
+                "kind": "osdu:wks:master-data--Reservoir:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Reservoir:*"],
+                "description": "Tầng chứa",
+                "fields": ["ReservoirName", "FieldID", "Formation"]
+            },
+            "Rig": {
+                "kind": "osdu:wks:master-data--Rig:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Rig:*"],
+                "description": "Giàn khoan",
+                "fields": ["RigName", "RigType", "Owner"]
+            },
+            "Well": {
+                "kind": "osdu:wks:master-data--Well:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Well:*"],
+                "description": "Giếng khoan",
+                "fields": ["WellName", "WellType", "SpudDate"]
             }
         }
     },
     "Wellbore Domain": {
-        "description": "Dữ liệu liên quan đến giếng khoan",
+        "description": "Entity được nạp bởi wellbore_data_ingestion_pipeline",
         "icon": "🕳️",
         "entities": {
+            "Wellbore": {
+                "kind": "osdu:wks:master-data--Wellbore:*",
+                "kind_alternatives": ["osdu:ddms-wellbore:master-data--Wellbore:*"],
+                "description": "Thân giếng",
+                "fields": ["WellboreName", "WellID", "FinalTotalDepth"]
+            },
+            "WellLogAcquisition": {
+                "kind": "osdu:wks:master-data--WellLogAcquisition:*",
+                "description": "Phiên thu thập well log",
+                "fields": ["ProjectName", "BeginDate", "EndDate"]
+            },
             "WellLog": {
-                "kind": "osdu:wks:well-log--WellLog:*",
+                "kind": "osdu:wks:work-product-component--WellLog:*",
                 "description": "Log giếng khoan",
                 "fields": ["LogName", "WellboreID", "LogType"]
             },
-            "WellboreTrajectory": {
-                "kind": "osdu:wks:wellbore--WellboreTrajectory:*",
-                "description": "Quỹ đạo giếng khoan",
-                "fields": ["WellboreID", "TrajectoryType"]
+            "WellboreIntervalSet": {
+                "kind": "osdu:wks:work-product-component--WellboreIntervalSet:*",
+                "description": "Bộ khoảng giếng khoan",
+                "fields": ["WellboreID", "IntervalName", "StartMeasuredDepth"]
             },
             "WellboreMarkerSet": {
-                "kind": "osdu:wks:wellbore--WellboreMarkerSet:*",
+                "kind": "osdu:wks:work-product-component--WellboreMarkerSet:*",
                 "description": "Bộ marker giếng khoan",
-                "fields": ["WellboreID", "MarkerSetName"]
+                "fields": ["WellboreID", "MarkerName", "MeasuredDepth"]
             },
-            "WellboreCompletion": {
-                "kind": "osdu:wks:wellbore--WellboreCompletion:*",
-                "description": "Hoàn thiện giếng",
-                "fields": ["WellboreID", "CompletionType"]
-            },
-            "WellLogChannel": {
-                "kind": "osdu:wks:well-log--WellLogChannel:*",
-                "description": "Kênh đo log",
-                "fields": ["ChannelName", "WellLogID", "Unit"]
-            },
-            "LoggingTool": {
-                "kind": "osdu:wks:well-log--LoggingTool:*",
-                "description": "Thiết bị đo log",
-                "fields": ["ToolName", "ToolType", "Vendor"]
-            },
-            "CoredInterval": {
-                "kind": "osdu:wks:wellbore--CoredInterval:*",
-                "description": "Khoảng lấy mẫu lõi",
-                "fields": ["WellboreID", "TopDepth", "BottomDepth"]
-            }
-        }
-    },
-    "Work/Project Domain": {
-        "description": "Dữ liệu dự án và sản phẩm làm việc",
-        "icon": "📁",
-        "entities": {
-            "Project": {
-                "kind": "osdu:wks:project--Project:*",
-                "description": "Dự án",
-                "fields": ["ProjectName", "ProjectType", "StartDate"]
-            },
-            "WorkProduct": {
-                "kind": "osdu:wks:work-product--WorkProduct:*",
-                "description": "Sản phẩm làm việc",
-                "fields": ["WorkProductName", "ProjectID", "WorkProductType"]
-            },
-            "WorkProductComponent": {
-                "kind": "osdu:wks:work-product-component--WorkProductComponent:*",
-                "description": "Thành phần sản phẩm",
-                "fields": ["ComponentName", "WorkProductID"]
-            },
-            "Activity": {
-                "kind": "osdu:wks:activity--Activity:*",
-                "description": "Hoạt động",
-                "fields": ["ActivityName", "ActivityType", "StartDate"]
-            },
-            "ActivityTemplate": {
-                "kind": "osdu:wks:activity--ActivityTemplate:*",
-                "description": "Mẫu hoạt động",
-                "fields": ["TemplateName", "ActivityType"]
+            "WellboreTrajectory": {
+                "kind": "osdu:wks:work-product-component--WellboreTrajectory:*",
+                "description": "Quỹ đạo giếng khoan",
+                "fields": ["WellboreID", "TrajectoryType", "SurveyVersion"]
             }
         }
     },
     "Seismic Domain": {
-        "description": "Dữ liệu địa chấn",
+        "description": "Entity được nạp bởi seismic_data_ingestion_pipeline",
         "icon": "📊",
         "entities": {
-            "SeismicSurvey": {
-                "kind": "osdu:wks:seismic--SeismicSurvey:*",
-                "description": "Khảo sát địa chấn",
-                "fields": ["SurveyName", "SurveyType", "AcquisitionDate"]
+            "SeismicAcquisitionDocuments": {
+                "kind": "osdu:wks:dataset--Document:*",
+                "description": "Tài liệu acquisition địa chấn",
+                "fields": ["DocumentName", "SurveyName", "DocumentType"]
             },
-            "Seismic2D": {
-                "kind": "osdu:wks:seismic--Seismic2D:*",
-                "description": "Địa chấn 2D",
-                "fields": ["SurveyName", "LineCount"]
+            "SeismicBinGrid": {
+                "kind": "osdu:wks:master-data--BinGrid:*",
+                "description": "Lưới bin địa chấn",
+                "fields": ["BinGridName", "SurveyName", "BinSize"]
             },
-            "Seismic3D": {
-                "kind": "osdu:wks:seismic--Seismic3D:*",
-                "description": "Địa chấn 3D",
-                "fields": ["SurveyName", "BinSize", "Coverage"]
+            "SeismicFieldTraceData": {
+                "kind": "osdu:wks:work-product-component--SeismicFieldTraceData:*",
+                "description": "Trace data từ field",
+                "fields": ["SurveyName", "LineName", "TraceCount"]
             },
-            "SeismicLine": {
-                "kind": "osdu:wks:seismic--SeismicLine:*",
-                "description": "Tuyến địa chấn",
-                "fields": ["LineName", "SurveyID", "Length"]
+            "SeismicLineGeometry": {
+                "kind": "osdu:wks:master-data--SeismicLineGeometry:*",
+                "description": "Hình học tuyến địa chấn",
+                "fields": ["LineName", "SurveyName", "Length"]
             },
-            "SeismicAcquisitionSurvey": {
-                "kind": "osdu:wks:seismic--SeismicAcquisitionSurvey:*",
-                "description": "Thu thập dữ liệu địa chấn",
-                "fields": ["SurveyName", "Contractor", "Equipment"]
-            }
-        }
-    },
-    "Files Domain": {
-        "description": "Dữ liệu file và dataset",
-        "icon": "📄",
-        "entities": {
-            "File": {
-                "kind": "osdu:wks:dataset--File:*",
-                "description": "File dữ liệu",
-                "fields": ["FileName", "FileSize", "FileType"]
+            "SeismicTraceData": {
+                "kind": "osdu:wks:work-product-component--SeismicTraceData:*",
+                "description": "Trace data địa chấn",
+                "fields": ["SeismicLineName", "Domain", "SampleInterval"]
             },
-            "Dataset": {
-                "kind": "osdu:wks:dataset--Dataset:*",
-                "description": "Bộ dữ liệu",
-                "fields": ["DatasetName", "DatasetType", "CreationDate"]
+            "SeismicFault": {
+                "kind": "osdu:wks:work-product-component--SeismicFault:*",
+                "description": "Fault địa chấn",
+                "fields": ["FaultName", "SurveyName", "InterpretationDate"]
             },
-            "FileCollection": {
-                "kind": "osdu:wks:dataset--FileCollection:*",
-                "description": "Bộ sưu tập file",
-                "fields": ["CollectionName", "FileCount"]
-            }
-        }
-    },
-    "Reference Domain": {
-        "description": "Dữ liệu tham chiếu và chuẩn",
-        "icon": "📚",
-        "entities": {
-            "ReferenceData": {
-                "kind": "osdu:wks:reference-data--ReferenceData:*",
-                "description": "Dữ liệu tham chiếu",
-                "fields": ["Name", "Type", "Version"]
+            "SeismicHorizon": {
+                "kind": "osdu:wks:work-product-component--SeismicHorizon:*",
+                "description": "Horizon địa chấn",
+                "fields": ["HorizonName", "SurveyName", "InterpretationDate"]
             },
-            "Unit": {
-                "kind": "osdu:wks:unit--Unit:*",
-                "description": "Đơn vị đo lường",
-                "fields": ["UnitName", "UnitType", "Symbol"]
-            },
-            "CRS": {
-                "kind": "osdu:wks:crs--CRS:*",
-                "description": "Hệ tọa độ tham chiếu",
-                "fields": ["CRSName", "CRSType", "Authority"]
+            "VelocityModeling": {
+                "kind": "osdu:wks:master-data--SeismicProcessingProject:*",
+                "description": "Mô hình velocity / processing project",
+                "fields": ["ProcessingProjectName", "StartDate", "EndDate"]
             }
         }
     }

@@ -58,12 +58,9 @@ Truy cập: http://localhost:5000
 ## 🎯 Tính năng
 
 ### 📊 Domains được hỗ trợ:
-- **General Data** (8 entities): Basin, Block, Field, Reservoir, Well, Wellbore, GeopoliticalEntity, Organisation
-- **Wellbore Domain** (7 entities): WellLog, WellboreTrajectory, WellboreMarkerSet, WellboreCompletion, WellLogChannel, LoggingTool, CoredInterval
-- **Work/Project Domain** (5 entities): Project, WorkProduct, WorkProductComponent, Activity, ActivityTemplate  
-- **Seismic Domain** (5 entities): SeismicSurvey, Seismic2D, Seismic3D, SeismicLine, SeismicAcquisitionSurvey
-- **Files Domain** (3 entities): File, Dataset, FileCollection
-- **Reference Domain** (3 entities): ReferenceData, Unit, CRS
+- **General Data** (8 entities): Agreement, Basin, Field, GeopoliticalEntity, Organisation, Reservoir, Rig, Well
+- **Wellbore Domain** (6 entities): Wellbore, WellLogAcquisition, WellLog, WellboreIntervalSet, WellboreMarkerSet, WellboreTrajectory
+- **Seismic Domain** (8 entities): SeismicAcquisitionDocuments, SeismicBinGrid, SeismicFieldTraceData, SeismicLineGeometry, SeismicTraceData, SeismicFault, SeismicHorizon, VelocityModeling
 
 ### ✨ Chức năng:
 - 🏠 **Trang chủ**: Xem tất cả domains với search
