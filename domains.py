@@ -96,25 +96,35 @@ DOMAINS = {
         "description": "Entity được nạp bởi seismic_data_ingestion_pipeline",
         "icon": "📊",
         "entities": {
+            "SeismicAcquisitionSurvey": {
+                "kind": "osdu:wks:master-data--SeismicAcquisitionSurvey:*",
+                "description": "Survey acquisition địa chấn",
+                "fields": ["SurveyName", "SurveyType", "StartDate"]
+            },
+            "SeismicProcessingProject": {
+                "kind": "osdu:wks:master-data--SeismicProcessingProject:*",
+                "description": "Processing project / quản lý xử lý",
+                "fields": ["ProjectName", "StartDate", "EndDate"]
+            },
             "SeismicAcquisitionDocuments": {
-                "kind": "osdu:wks:dataset--Document:*",
+                "kind": "osdu:wks:work-product-component--SeismicAcquisitionDocuments:*",
                 "description": "Tài liệu acquisition địa chấn",
                 "fields": ["DocumentName", "SurveyName", "DocumentType"]
             },
             "SeismicBinGrid": {
-                "kind": "osdu:wks:master-data--BinGrid:*",
+                "kind": "osdu:wks:work-product-component--SeismicBinGrid:*",
                 "description": "Lưới bin địa chấn",
                 "fields": ["BinGridName", "SurveyName", "BinSize"]
+            },
+            "SeismicLineGeometry": {
+                "kind": "osdu:wks:work-product-component--SeismicLineGeometry:*",
+                "description": "Hình học tuyến địa chấn",
+                "fields": ["LineName", "SurveyName", "Length"]
             },
             "SeismicFieldTraceData": {
                 "kind": "osdu:wks:work-product-component--SeismicFieldTraceData:*",
                 "description": "Trace data từ field",
                 "fields": ["SurveyName", "LineName", "TraceCount"]
-            },
-            "SeismicLineGeometry": {
-                "kind": "osdu:wks:master-data--SeismicLineGeometry:*",
-                "description": "Hình học tuyến địa chấn",
-                "fields": ["LineName", "SurveyName", "Length"]
             },
             "SeismicTraceData": {
                 "kind": "osdu:wks:work-product-component--SeismicTraceData:*",
@@ -132,9 +142,14 @@ DOMAINS = {
                 "fields": ["HorizonName", "SurveyName", "InterpretationDate"]
             },
             "VelocityModeling": {
-                "kind": "osdu:wks:master-data--SeismicProcessingProject:*",
-                "description": "Mô hình velocity / processing project",
-                "fields": ["ProcessingProjectName", "StartDate", "EndDate"]
+                "kind": "osdu:wks:work-product-component--VelocityModeling:*",
+                "description": "Mô hình velocity / kết quả mô phỏng",
+                "fields": ["ModelName", "ProcessingProject", "CreatedDate"]
+            },
+            "GravityMagneticAcquisitionSurvey": {
+                "kind": "osdu:wks:master-data--GravityMagneticAcquisitionSurvey:*",
+                "description": "Survey trọng lực / từ tính",
+                "fields": ["SurveyName", "SurveyType", "StartDate"]
             }
         }
     }
