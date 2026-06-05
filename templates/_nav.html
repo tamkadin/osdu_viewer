@@ -1,0 +1,56 @@
+<nav class="topbar" aria-label="Main navigation">
+    <div class="topbar__brand">
+        <a href="/home">OSDU Web Console</a>
+    </div>
+    <div class="topbar__modules">
+        <a class="nav-pill {% if request.path.startswith('/catalog') or request.path.startswith('/data-catalog') or request.path.startswith('/domain') or request.path.startswith('/records') or request.path.startswith('/record') %}active{% endif %}" href="/data-catalog">Data Catalog</a>
+        <a class="nav-pill {% if request.path.startswith('/access-control') or request.path.startswith('/access-governance') or request.path.startswith('/governance') %}active{% endif %}" href="/governance">Access Governance</a>
+    </div>
+    <div class="topbar__context">
+        <span class="status-badge status-{{ token_status|lower }}">{{ token_status }}</span>
+        <span class="meta-pill">{{ active_auth_label }}</span>
+        <span class="meta-pill">{{ auth_identity or 'unknown' }}</span>
+        <span class="meta-pill">{{ active_partition or 'osdu' }}</span>
+        <button class="btn btn-compact" type="button" onclick="window.osduSwitchAuth(event)">Switch</button>
+    </div>
+</nav>
+
+<script>
+    window.osduSwitchAuth = async function(event) {
+        if (event) event.preventDefault();
+        try {
+            await fetch('/api/auth/clear', { method: 'POST' });
+        } catch (error) {
+            console.warn('Could not clear auth state', error);
+        }
+        window.location.href = '/connect?switch=1';
+    };
+
+    window.osduRedirectToConnect = function() {
+        window.location.href = '/connect';
+    };
+
+    window.isAuthenticated = async function() {
+        try {
+            const response = await fetch('/api/auth/status');
+            const data = await response.json();
+            return !!data.ready;
+        } catch (error) {
+            return false;
+        }
+    };
+
+    window.osduFetchJson = async function(url, options) {
+        const response = await fetch(url, options);
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await response.json() : {};
+        if (response.status === 401) {
+            window.osduRedirectToConnect();
+            throw new Error(data.error || 'Authentication required');
+        }
+        if (!response.ok || data.error) {
+            throw new Error(data.error || `Request failed: ${response.status}`);
+        }
+        return data;
+    };
+</script>

@@ -1,67 +1,64 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ domain_name }} - OSDU Entities</title>
+    <title>{{ domain_name }} - OSDU Entity Kinds</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container fade-in">
-        <div class="breadcrumb">
-            <a href="/">🏠 Home</a> / {{ domain_info.icon }} {{ domain_name }}
-        </div>
-        
-        <h1 class="page-title">{{ domain_info.icon }} {{ domain_name }}</h1>
-        <p>{{ domain_info.description }}</p>
-        
-        <div class="search-container">
-            <input type="text" class="search-input" placeholder="🔍 Tìm kiếm entity..." id="searchInput">
-        </div>
-        
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-value">{{ domain_info.entities|length }}</div>
-                <div class="stat-label">Entities</div>
-            </div>
-        </div>
-        
-        <div class="entity-grid" id="entityGrid">
-            {% for entity_name, entity_info in domain_info.entities.items() %}
-            <div class="entity-card card" onclick="window.location.href='/records/{{ domain_name|urlencode }}/{{ entity_name|urlencode }}'">
-                <div class="entity-name">{{ entity_name }}</div>
-                <div class="entity-desc">{{ entity_info.description }}</div>
-            </div>
-            {% endfor %}
+    <div class="container app-shell fade-in">
+        {% include '_nav.html' %}
+        <div class="data-viewer-shell">
+            {% include '_data_viewer_sidebar.html' %}
+            <main class="data-viewer-main">
+                <div class="breadcrumb">
+                    <a href="/">Home</a>
+                    <span>/</span>
+                    <a href="/data-catalog">Data Catalog</a>
+                    <span>/</span>
+                    <span>{{ domain_name }}</span>
+                </div>
+
+                <header class="admin-topbar">
+                    <div>
+                        <span class="eyebrow">Domain</span>
+                        <h1>{{ domain_name }}</h1>
+                        <p>{{ domain_info.entities|length }} kinds</p>
+                    </div>
+                </header>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Kinds</h2>
+                    </div>
+                    <input type="text" class="search-input compact-search" placeholder="Search entity kind" id="searchInput">
+                </div>
+
+                <div class="metric-grid metric-grid--compact">
+                    <div class="metric"><span>Entity Kinds</span><strong>{{ domain_info.entities|length }}</strong></div>
+                    <div class="metric"><span>Partition</span><strong>{{ active_partition or 'osdu' }}</strong></div>
+                </div>
+
+                <div class="entity-grid" id="entityGrid">
+                    {% for entity_name, entity_info in domain_info.entities.items() %}
+                    <a class="kind-card card" href="/records/{{ domain_name|urlencode }}/{{ entity_name|urlencode }}">
+                        <div class="kind-card__icon">{{ domain_info.icon }}</div>
+                        <div class="entity-name">{{ entity_name }}</div>
+                        <div class="entity-desc">{{ 'Master data' if 'master-data' in entity_info.kind else 'Work product' }}</div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </main>
         </div>
     </div>
 
     <script>
-        // Search functionality
         document.getElementById('searchInput').addEventListener('input', function(e) {
             const searchTerm = e.target.value.toLowerCase();
-            const entityCards = document.querySelectorAll('.entity-card');
-            
-            entityCards.forEach(card => {
-                const name = card.querySelector('.entity-name').textContent.toLowerCase();
-                const desc = card.querySelector('.entity-desc').textContent.toLowerCase();
-                
-                if (name.includes(searchTerm) || desc.includes(searchTerm)) {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = 'none';
-                }
+            document.querySelectorAll('.kind-card').forEach(card => {
+                card.style.display = card.textContent.toLowerCase().includes(searchTerm) ? 'block' : 'none';
             });
-            
-            // Update stats
-            const visibleCards = document.querySelectorAll('.entity-card[style*="block"], .entity-card:not([style*="none"])').length;
-            document.querySelector('.stat-value').textContent = visibleCards;
-        });
-        
-        // Add fade-in animation delay for cards
-        document.querySelectorAll('.entity-card').forEach((card, index) => {
-            card.style.animationDelay = `${index * 0.1}s`;
-            card.classList.add('fade-in');
         });
     </script>
 </body>

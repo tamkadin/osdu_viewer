@@ -14,10 +14,22 @@ class TokenManager:
     def __init__(self, config: Dict):
         self.token_endpoint = config.get('OSDU_TOKEN_ENDPOINT')
         self.token_host = config.get('OSDU_TOKEN_HOST')
+        self.grant_type = str(config.get('OSDU_TOKEN_GRANT_TYPE', 'client_credentials')).strip().lower()
         self.client_id = config.get('OSDU_CLIENT_ID')
         self.client_secret = config.get('OSDU_CLIENT_SECRET')
         self.refresh_token = config.get('OSDU_REFRESH_TOKEN', '')
-        self.verify_ssl = config.get('OSDU_VERIFY_SSL', 'False') == 'True'
+        self.username = config.get('OSDU_USERNAME', '')
+        self.password = config.get('OSDU_PASSWORD', '')
+        self.scope = config.get('OSDU_TOKEN_SCOPE', 'openid profile email')
+        self.default_expires_seconds = int(config.get('OSDU_TOKEN_DEFAULT_EXPIRES_SECONDS', 3600))
+        self.shared_access_token = config.get('OSDU_SHARED_ACCESS_TOKEN', '')
+        self.verify_ssl = self._as_bool(config.get('OSDU_VERIFY_SSL', 'False'))
+        self._cache_identity = {
+            'token_endpoint': self.token_endpoint,
+            'grant_type': self.grant_type,
+            'client_id': self.client_id,
+            'username': self.username if self.grant_type == 'password' else ''
+        }
         
         self._cached_token = None
         self._token_expiry = 0
@@ -29,6 +41,10 @@ class TokenManager:
     def get_token(self) -> str:
         """Get valid access token, refresh if needed"""
         with self._lock:
+            shared_token = self._read_shared_access_token()
+            if shared_token:
+                return shared_token
+
             if self._cached_token and time.time() < self._token_expiry - 300:
                 return self._cached_token
                 
@@ -44,6 +60,8 @@ class TokenManager:
             if os.path.exists(self._cache_file):
                 with open(self._cache_file, 'r') as f:
                     cache_data = json.load(f)
+                    if cache_data.get('source') != self._cache_identity:
+                        return False
                     self._cached_token = cache_data.get('access_token')
                     self._token_expiry = cache_data.get('expiry', 0)
                     return True
@@ -57,7 +75,8 @@ class TokenManager:
             cache_data = {
                 'access_token': token,
                 'expiry': expiry,
-                'cached_at': time.time()
+                'cached_at': time.time(),
+                'source': self._cache_identity
             }
             with open(self._cache_file, 'w') as f:
                 json.dump(cache_data, f)
@@ -66,7 +85,7 @@ class TokenManager:
 
     def _request_new_token(self) -> str:
         """Request new access token"""
-        if not all([self.token_endpoint, self.client_id, self.client_secret]):
+        if not self.token_endpoint or not self.client_id:
             raise Exception("Missing required token configuration")
 
         # Try refresh token first if available
@@ -76,8 +95,11 @@ class TokenManager:
             except Exception as e:
                 logger.warning(f"Refresh token failed, trying client credentials: {e}")
 
-        # Fall back to client credentials
-        return self._request_with_client_credentials()
+        if self.grant_type == 'password':
+            return self._request_with_password_credentials()
+        if self.grant_type == 'client_credentials':
+            return self._request_with_client_credentials()
+        raise Exception("Unsupported OSDU_TOKEN_GRANT_TYPE. Use client_credentials or password")
 
     def _request_with_refresh_token(self) -> str:
         """Request token using refresh token"""
@@ -86,9 +108,10 @@ class TokenManager:
         payload = {
             "grant_type": "refresh_token",
             "client_id": self.client_id,
-            "client_secret": self.client_secret,
             "refresh_token": self.refresh_token
         }
+        if self.client_secret:
+            payload["client_secret"] = self.client_secret
 
         # Prepare headers with Host bypass for DNS resolution
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -118,6 +141,9 @@ class TokenManager:
 
     def _request_with_client_credentials(self) -> str:
         """Request token using client credentials"""
+        if not self.client_secret:
+            raise Exception("OSDU_CLIENT_SECRET is required for client_credentials grant")
+
         logger.info(f"Requesting token with client_credentials from: {self.token_endpoint}")
         
         payload = {
@@ -147,13 +173,52 @@ class TokenManager:
         token_data = response.json()
         return self._process_token_response(token_data)
 
+    def _request_with_password_credentials(self) -> str:
+        """Request token using username/email and password."""
+        if not self.username or not self.password:
+            raise Exception("OSDU_USERNAME and OSDU_PASSWORD are required for password grant")
+
+        logger.info(f"Requesting token with password grant from: {self.token_endpoint}")
+
+        payload = {
+            "grant_type": "password",
+            "client_id": self.client_id,
+            "username": self.username,
+            "password": self.password,
+            "scope": self.scope
+        }
+        if self.client_secret:
+            payload["client_secret"] = self.client_secret
+
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if self.token_host:
+            headers["Host"] = self.token_host
+            logger.info(f"Using Host header: {self.token_host} for IP endpoint")
+
+        response = requests.post(
+            self.token_endpoint,
+            data=payload,
+            headers=headers,
+            verify=self.verify_ssl
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Password grant request failed - Status: {response.status_code}")
+            logger.error(f"Response: {response.text}")
+            raise Exception(f"Password grant failed: {response.text}")
+
+        token_data = response.json()
+        if "refresh_token" in token_data:
+            self.refresh_token = token_data["refresh_token"]
+        return self._process_token_response(token_data)
+
     def _process_token_response(self, token_data: Dict) -> str:
         """Process token response and cache"""
         access_token = token_data.get("access_token")
         if not access_token:
             raise Exception("No access token in response")
 
-        expires_in = token_data.get("expires_in", 3600)
+        expires_in = token_data.get("expires_in", self.default_expires_seconds)
         self._token_expiry = time.time() + int(expires_in)
         self._cached_token = access_token
 
@@ -175,8 +240,27 @@ class TokenManager:
 
     def is_token_valid(self) -> bool:
         """Check if current token is valid"""
-        return (self._cached_token and 
-                time.time() < self._token_expiry - 300)
+        if self._read_shared_access_token():
+            return True
+        return (self._cached_token and time.time() < self._token_expiry - 300)
+
+    def _read_shared_access_token(self) -> Optional[str]:
+        """Read a shared token from env. Supports raw JWT or JSON with expiry."""
+        if not self.shared_access_token:
+            return None
+        try:
+            payload = json.loads(self.shared_access_token)
+            token = payload.get('access_token')
+            expiry = float(payload.get('expiry') or 0)
+            if token and time.time() < expiry - 300:
+                return token
+            return None
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return self.shared_access_token
+
+    @staticmethod
+    def _as_bool(value) -> bool:
+        return str(value).strip().lower() in ('1', 'true', 'yes', 'y', 'on')
 
     def start_background_refresh(self, interval: int = 3000):
         """Start background thread to refresh token periodically"""

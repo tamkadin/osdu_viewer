@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSDU Auth</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container app-shell auth-landing">
+        {% include '_nav.html' %}
+        <main class="auth-landing__content">
+            <h1>OSDU Web Console</h1>
+            <p>Connect once, then work in Data Viewer or Access Control.</p>
+            <button class="btn btn-primary" onclick="document.getElementById('authModal').classList.remove('is-hidden')">Connect to OSDU</button>
+        </main>
+    </div>
+</body>
+</html>

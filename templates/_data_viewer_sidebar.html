@@ -1,0 +1,15 @@
+<aside class="data-sidebar">
+    <div class="admin-brand">Data Catalog</div>
+    <a class="data-sidebar-item {% if domain_name is not defined %}active{% endif %}" href="/data-catalog">
+        <span>All</span>
+        <span>Domains</span>
+        <em>{{ domains|length }}</em>
+    </a>
+    {% for sidebar_domain_name, sidebar_domain_info in domains.items() %}
+    <a class="data-sidebar-item {% if domain_name is defined and sidebar_domain_name == domain_name %}active{% endif %}" href="/domain/{{ sidebar_domain_name|urlencode }}">
+        <span>{{ sidebar_domain_info.icon }}</span>
+        <span>{{ sidebar_domain_name.replace(' Data', '').replace(' Domain', '') }}</span>
+        <em>{{ sidebar_domain_info.entities|length }}</em>
+    </a>
+    {% endfor %}
+</aside>

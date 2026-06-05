@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect to OSDU</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="connect-body">
+    <main class="connect-shell">
+        <section class="connect-card card">
+            <div class="connect-hero">
+                <div>
+                    <span class="eyebrow">OSDU Web Console</span>
+                    <h1>Connect to your OSDU environment</h1>
+                    <p>Browse records. Review access.</p>
+                </div>
+                <div class="connect-status">
+                    <span class="status-badge status-{{ token_status|lower }}">{{ token_status }}</span>
+                    {% if auth_ready %}<span class="meta-pill">Ready</span>{% endif %}
+                </div>
+            </div>
+
+            <form onsubmit="requestRuntimeToken(event)" class="connect-form">
+                <div class="auth-mode-grid">
+                    <label class="auth-mode-card {% if defaults.OSDU_TOKEN_GRANT_TYPE != 'password' %}selected{% endif %}">
+                        <input type="radio" name="grantType" value="client_credentials" {% if defaults.OSDU_TOKEN_GRANT_TYPE != 'password' %}checked{% endif %} onchange="setGrantMode()">
+                        <strong>Service Account</strong>
+                        <span>client_credentials</span>
+                        <small>Client secret stays in server config.</small>
+                    </label>
+                    <label class="auth-mode-card {% if defaults.OSDU_TOKEN_GRANT_TYPE == 'password' %}selected{% endif %}">
+                        <input type="radio" name="grantType" value="password" {% if defaults.OSDU_TOKEN_GRANT_TYPE == 'password' %}checked{% endif %} onchange="setGrantMode()">
+                        <strong>User Login</strong>
+                        <span>delegated access</span>
+                        <small>Uses your OSDU user credentials.</small>
+                    </label>
+                </div>
+
+                <div class="connect-panel" id="serviceAccountFields">
+                    <div class="connect-field-row">
+                        <span>Client</span>
+                        <strong>{{ defaults.OSDU_CLIENT_ID or 'datafier' }}</strong>
+                    </div>
+                    <div class="connect-field-row">
+                        <span>Grant</span>
+                        <strong>client_credentials</strong>
+                    </div>
+                </div>
+
+                <div class="connect-grid" id="userLoginFields">
+                    <label>
+                        Email or username
+                        <input id="username" autocomplete="username" placeholder="user@example.com" value="{{ defaults.OSDU_USERNAME or '' }}">
+                    </label>
+                    <label>
+                        Password
+                        <input id="password" type="password" autocomplete="current-password" placeholder="Password">
+                    </label>
+                </div>
+
+                <details class="advanced-auth compact-advanced">
+                    <summary>Advanced</summary>
+                    <div class="advanced-auth-grid">
+                        <label>
+                            OSDU Base URL
+                            <input id="baseUrl" value="{{ defaults.OSDU_BASE_URL or '' }}" placeholder="https://osdu.example.com">
+                        </label>
+                        <label>
+                            Partition
+                            <input id="partition" value="{{ defaults.OSDU_PARTITION_ID or 'osdu' }}" placeholder="osdu">
+                        </label>
+                        <label>
+                            Token Endpoint
+                            <input id="tokenEndpoint" value="{{ defaults.OSDU_TOKEN_ENDPOINT or '' }}" placeholder="https://keycloak.../token">
+                        </label>
+                        <label>
+                            Keycloak Admin Base URL
+                            <input id="authBaseUrl" value="{{ defaults.OSDU_AUTH_BASE_URL or '' }}" placeholder="https://keycloak.example.com">
+                        </label>
+                        <label>
+                            Keycloak Realm
+                            <input id="authRealm" value="{{ defaults.OSDU_AUTH_REALM or '' }}" placeholder="osdu">
+                        </label>
+                    </div>
+                </details>
+
+                <div class="connect-actions">
+                    <button class="btn btn-primary" id="connectButton">Connect</button>
+                    {% if auth_ready %}
+                    <a class="btn" href="/home">Dashboard</a>
+                    {% endif %}
+                </div>
+                <p class="connect-message" id="connectMessage"></p>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        const nextUrl = {{ next_url|tojson }};
+
+        async function clearIfSwitching() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('switch') === '1') {
+                try {
+                    await fetch('/api/auth/clear', { method: 'POST' });
+                } catch (error) {
+                    console.warn('Could not clear auth state', error);
+                }
+            }
+        }
+
+        function selectedGrantType() {
+            return document.querySelector('input[name="grantType"]:checked')?.value || 'client_credentials';
+        }
+
+        function setGrantMode() {
+            const mode = selectedGrantType();
+            const userFields = document.getElementById('userLoginFields');
+            const serviceFields = document.getElementById('serviceAccountFields');
+            const button = document.getElementById('connectButton');
+            userFields.style.display = mode === 'password' ? 'grid' : 'none';
+            serviceFields.style.display = mode === 'password' ? 'none' : 'grid';
+            document.getElementById('username').required = mode === 'password';
+            document.getElementById('password').required = mode === 'password';
+            button.textContent = mode === 'password' ? 'Sign in' : 'Connect';
+        }
+
+        async function requestRuntimeToken(event) {
+            event.preventDefault();
+            const button = document.getElementById('connectButton');
+            const message = document.getElementById('connectMessage');
+            button.disabled = true;
+            message.textContent = 'Connecting...';
+            try {
+                const response = await fetch('/api/auth/connect', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        grant_type: selectedGrantType(),
+                        username: field('username'),
+                        password: field('password'),
+                        base_url: field('baseUrl') || undefined,
+                        partition_id: field('partition') || undefined,
+                        token_endpoint: field('tokenEndpoint') || undefined,
+                        auth_base_url: field('authBaseUrl') || undefined,
+                        auth_realm: field('authRealm') || undefined
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) throw new Error(data.error || 'Cannot connect');
+                message.textContent = 'Ready';
+                window.location.href = nextUrl || '/home';
+            } catch (error) {
+                message.textContent = 'Cannot connect. Check token settings.';
+                message.title = error.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        function field(id) {
+            return document.getElementById(id)?.value.trim() || '';
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            await clearIfSwitching();
+            setGrantMode();
+        });
+    </script>
+</body>
+</html>

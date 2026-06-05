@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSDU Access Governance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container app-shell access-admin-page">
+        {% include '_nav.html' %}
+
+        <div class="access-admin-shell">
+            <aside class="admin-sidebar">
+                <div class="admin-brand">Access Governance</div>
+                <button class="admin-nav-item active" data-section="dashboard" onclick="openAdminSection('dashboard')">Dashboard</button>
+                <button class="admin-nav-item" data-section="users" onclick="openAdminSection('users')">Users</button>
+                <button class="admin-nav-item" data-section="partitions" onclick="openAdminSection('partitions')">Partitions</button>
+                <button class="admin-nav-item" data-section="groups" onclick="openAdminSection('groups')">Groups</button>
+                <button class="admin-nav-item" data-section="legal" onclick="openAdminSection('legal')">Legal Tags</button>
+                <button class="admin-nav-item" data-section="policies" onclick="openAdminSection('policies')">ACL Policies</button>
+                <button class="admin-nav-item" data-section="checker" onclick="openAdminSection('checker')">Access Checker</button>
+                <button class="admin-nav-item" data-section="audit" onclick="openAdminSection('audit')">Audit Logs</button>
+            </aside>
+
+            <main class="admin-main">
+            <header class="admin-topbar">
+                <div>
+                    <h1 id="sectionTitle">Access Governance</h1>
+                    <p id="sectionSubtitle">Governance overview</p>
+                </div>
+                <div class="admin-context">
+                    <span>Partition <strong id="activePartition">{{ partition_id }}</strong></span>
+                </div>
+            </header>
+
+            <section class="admin-section active" id="section-dashboard">
+                <div class="governance-grid">
+                    <div class="admin-panel">
+                        <div class="panel-heading">
+                            <h2>Overview</h2>
+                            <button class="btn btn-primary" onclick="refreshDashboard()">Refresh</button>
+                        </div>
+                        <div class="metric-grid metric-grid--compact">
+                            <div class="metric"><span>Groups</span><strong id="metricGroups">-</strong></div>
+                            <div class="metric"><span>Legal Tags</span><strong id="metricLegal">-</strong></div>
+                            <div class="metric"><span>Partitions</span><strong id="metricPartitions">-</strong></div>
+                            <div class="metric"><span>Users inspected</span><strong id="metricUsers">0</strong></div>
+                        </div>
+                        <div id="dashboardStatus" class="status-grid"></div>
+                    </div>
+                    <div class="admin-panel">
+                        <div class="panel-heading">
+                            <h2>Local workspace</h2>
+                        </div>
+                        <div class="metric-grid metric-grid--compact">
+                            <div class="metric"><span>Local ACL policies</span><strong id="metricPolicies">0</strong></div>
+                            <div class="metric"><span>Local audit logs</span><strong id="metricAudit">0</strong></div>
+                        </div>
+                        <p class="muted">Local workspace</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-users">
+                <div class="admin-panel">
+                    <div class="panel-heading">
+                        <h2>Users</h2>
+                        <div class="toolbar-actions">
+                            <button class="btn" onclick="syncLocalUsers()">Refresh local</button>
+                            <button class="btn btn-primary" onclick="loadUsers()">Sync from Keycloak</button>
+                        </div>
+                    </div>
+                    <form class="inline-admin-form" onsubmit="createLocalUser(event)">
+                        <input id="userEmail" placeholder="email" required>
+                        <input id="userName" placeholder="username">
+                        <input id="userFullName" placeholder="full name">
+                        <input id="userCompany" placeholder="company">
+                        <input id="userDepartment" placeholder="department">
+                        <button class="btn btn-primary">Create Local User</button>
+                    </form>
+                </div>
+                <div class="admin-panel">
+                    <div class="filter-row">
+                        <input id="userSearch" placeholder="Search email or username" oninput="renderUsers()">
+                        <select id="userSourceFilter" onchange="renderUsers()">
+                            <option value="ALL">All sources</option>
+                        </select>
+                        <select id="userStatusFilter" onchange="renderUsers()">
+                            <option value="ALL">All statuses</option>
+                        </select>
+                        <span id="userCount"></span>
+                    </div>
+                    <div id="usersWarning"></div>
+                    <div id="usersTable"></div>
+                </div>
+                <div class="admin-panel user-groups-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h2>Inspect user groups</h2>
+                            <p>Enter a user email to inspect OSDU Entitlements membership.</p>
+                        </div>
+                    </div>
+                    <form class="user-groups-form" onsubmit="loadUserGroups(event)">
+                        <input id="userInspectEmail" placeholder="user@example.com" autocomplete="email" required>
+                        <button class="btn btn-primary">Load groups</button>
+                    </form>
+                    <div class="metric-grid metric-grid--compact user-group-summary is-hidden" id="userGroupSummary">
+                        <div class="metric"><span>Total groups</span><strong id="userGroupTotal">0</strong></div>
+                        <div class="metric"><span>Data groups</span><strong id="userGroupData">0</strong></div>
+                        <div class="metric"><span>User groups</span><strong id="userGroupUser">0</strong></div>
+                        <div class="metric"><span>Service groups</span><strong id="userGroupService">0</strong></div>
+                        <div class="metric"><span>System groups</span><strong id="userGroupSystem">0</strong></div>
+                        <div class="metric"><span>Unknown groups</span><strong id="userGroupUnknown">0</strong></div>
+                    </div>
+                    <div id="userGroupRemoveResult"></div>
+                    <div id="userGroupResult" class="user-group-empty">
+                        <div class="empty-state">Enter a user email to inspect OSDU Entitlements membership.</div>
+                    </div>
+                    <form class="user-groups-form compact-form" onsubmit="addInspectedUserToGroup(event)">
+                        <div class="token-picker" id="userAddGroupPicker">
+                            <div class="token-picker__chips" id="userAddGroupChips"></div>
+                            <input
+                                id="userAddGroupSearch"
+                                placeholder="Search groups, paste many with comma or newline"
+                                autocomplete="off"
+                                onfocus="openGroupPicker()"
+                                oninput="renderGroupPickerSuggestions()"
+                                onkeydown="handleGroupPickerKeydown(event)"
+                                onpaste="handleGroupPickerPaste(event)"
+                            >
+                            <div class="token-picker__menu is-hidden" id="userAddGroupSuggestions"></div>
+                        </div>
+                        <select id="userAddGroupRole">
+                            <option value="MEMBER">MEMBER</option>
+                            <option value="OWNER">OWNER</option>
+                        </select>
+                        <button class="btn">Add to group</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-partitions">
+                <div class="admin-panel">
+                    <div class="panel-heading">
+                        <h2>Partitions</h2>
+                        <button class="btn btn-primary" onclick="loadPartitions()">Refresh from Partition service</button>
+                    </div>
+                    <div id="partitionsTable"></div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-groups">
+                <div class="admin-panel">
+                    <div class="panel-heading">
+                        <h2>Entitlements Groups</h2>
+                        <div class="toolbar-actions">
+                            <button class="btn" onclick="loadGroups()">Refresh from Entitlements</button>
+                            <button class="btn btn-primary" onclick="openCreateGroup()">+ Create Group</button>
+                        </div>
+                    </div>
+                    <div class="metric-grid metric-grid--compact">
+                        <div class="metric"><span>All groups</span><strong id="groupAllCount">0</strong></div>
+                        <div class="metric"><span>Data groups</span><strong id="groupDataCount">0</strong></div>
+                        <div class="metric"><span>Service groups</span><strong id="groupServiceCount">0</strong></div>
+                        <div class="metric"><span>User groups</span><strong id="groupUserCount">0</strong></div>
+                    </div>
+                    <div class="filter-row">
+                        <input id="groupSearch" placeholder="Search groups" oninput="renderGroups()">
+                        <select id="groupTypeFilter" onchange="renderGroups()">
+                            <option value="ALL">All types</option>
+                            <option value="DATA">DATA</option>
+                            <option value="SERVICE">SERVICE</option>
+                            <option value="USER">USER</option>
+                            <option value="SYSTEM">SYSTEM</option>
+                            <option value="UNKNOWN">UNKNOWN</option>
+                        </select>
+                        <select id="groupSourceFilter" onchange="renderGroups()">
+                            <option value="ALL">All sources</option>
+                        </select>
+                        <span id="groupCount"></span>
+                    </div>
+                    <div id="groupsTable"></div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-legal">
+                <div class="admin-panel">
+                    <div class="panel-heading">
+                        <h2>Legal Tags</h2>
+                        <div class="toolbar-actions">
+                            <button class="btn" onclick="loadLegalTags()">Refresh from Legal</button>
+                            <button class="btn btn-primary" onclick="openCreateLegalTag()">+ Create Legal Tag</button>
+                        </div>
+                    </div>
+                    <div id="legalTagMutationResult"></div>
+                    <div class="filter-row">
+                        <input id="legalSearch" placeholder="Search legal tags" oninput="renderLegalTags()">
+                        <select id="legalStatusFilter" onchange="renderLegalTags()">
+                            <option value="ALL">All statuses</option>
+                        </select>
+                        <select id="legalCountryFilter" onchange="renderLegalTags()">
+                            <option value="ALL">All countries</option>
+                        </select>
+                        <span id="legalCount"></span>
+                    </div>
+                    <div id="legalTable"></div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-policies">
+                <div class="admin-panel">
+                    <div class="panel-heading"><h2>ACL Policies</h2></div>
+                    <form class="inline-admin-form" onsubmit="createAclPolicy(event)">
+                        <input id="policyCode" placeholder="policy code" required>
+                        <input id="policyName" placeholder="name" required>
+                        <input id="policyPartitionId" placeholder="partition id" value="{{ partition_id }}">
+                        <input id="policyDomain" placeholder="domain">
+                        <input id="policySchemas" placeholder="schemas, comma separated">
+                        <input id="policyViewers" placeholder="viewer groups, comma separated">
+                        <input id="policyOwners" placeholder="owner groups, comma separated">
+                        <input id="policyLegalTag" placeholder="legal tag">
+                        <input id="policyCountries" placeholder="countries, comma separated" value="VN">
+                        <button class="btn btn-primary">Create Local Policy</button>
+                    </form>
+                </div>
+                <div class="admin-panel">
+                    <div class="filter-row">
+                        <input id="policySearch" placeholder="Search policies" oninput="renderPolicies()">
+                        <select id="policyPartitionFilter" onchange="renderPolicies()">
+                            <option value="ALL">All partitions</option>
+                        </select>
+                        <select id="policyDomainFilter" onchange="renderPolicies()">
+                            <option value="ALL">All domains</option>
+                        </select>
+                        <select id="policyStatusFilter" onchange="renderPolicies()">
+                            <option value="ALL">All statuses</option>
+                        </select>
+                        <span id="policyCount"></span>
+                    </div>
+                    <div id="policiesTable"></div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-checker">
+                <div class="admin-panel checker-panel">
+                    <div class="panel-heading">
+                        <div>
+                            <h2>Access Checker</h2>
+                            <p>ACL check</p>
+                        </div>
+                    </div>
+                    <form class="checker-form" onsubmit="checkAccess(event)">
+                        <label>
+                            Record ID
+                            <input id="checkRecordId" placeholder="osdu:..." required>
+                        </label>
+                        <label>
+                            User email or group name
+                            <input id="checkUserEmail" placeholder="user@example.com">
+                        </label>
+                        <label>
+                            Action
+                            <select id="checkAction">
+                                <option value="view">view</option>
+                                <option value="owner">owner</option>
+                                <option value="delete">delete</option>
+                                <option value="download">download</option>
+                            </select>
+                        </label>
+                        <label class="full-span">
+                            Known user groups
+                            <textarea id="checkUserGroups" rows="4" placeholder="data.example.viewers@osdu, one per line or comma separated"></textarea>
+                        </label>
+                        <label class="checkbox-row full-span">
+                            <input type="checkbox" id="scanMemberships">
+                            Scan group memberships when no group is provided
+                        </label>
+                        <button class="btn btn-primary full-span">Run Check</button>
+                    </form>
+                    <div id="checkerResult"></div>
+                </div>
+            </section>
+
+            <section class="admin-section" id="section-audit">
+                <div class="admin-panel">
+                    <div class="panel-heading">
+                        <h2>Audit Logs</h2>
+                        <button class="btn" onclick="clearAuditLogs()">Clear Local Logs</button>
+                    </div>
+                    <div id="auditTable"></div>
+                </div>
+            </section>
+            </main>
+        </div>
+    </div>
+
+    <div class="confirm-modal is-hidden" id="groupDetailModal" role="dialog" aria-modal="true">
+        <div class="confirm-modal__panel confirm-modal__panel--wide">
+            <div class="panel-heading">
+                <h2>Group Detail</h2>
+                <button class="btn" onclick="closeGroupDetail()">Close</button>
+            </div>
+            <div id="groupDetailContent"></div>
+        </div>
+    </div>
+
+    <div class="confirm-modal is-hidden" id="createGroupModal" role="dialog" aria-modal="true">
+        <div class="confirm-modal__panel confirm-modal__panel--wide">
+            <div class="panel-heading">
+                <h2>Create Entitlements Group</h2>
+                <button class="btn" onclick="closeCreateGroup()">Cancel</button>
+            </div>
+            <form class="modal-form" onsubmit="createEntitlementsGroup(event)">
+                <label>
+                    Group type
+                    <select id="createGroupType" onchange="validateCreateGroupPrefix()">
+                        <option value="DATA">DATA</option>
+                        <option value="USER">USER</option>
+                        <option value="SERVICE">SERVICE</option>
+                    </select>
+                </label>
+                <label>
+                    Group name / email
+                    <input id="createGroupName" placeholder="data.pvn.block-15-01.viewers@osdu.group" oninput="validateCreateGroupPrefix()" required>
+                </label>
+                <label class="full-span">
+                    Description
+                    <input id="createGroupDescription" placeholder="Optional description">
+                </label>
+                <label class="full-span">
+                    Initial members
+                    <textarea id="createGroupMembers" rows="4" placeholder="one email per line"></textarea>
+                </label>
+                <label>
+                    Initial role
+                    <select id="createGroupInitialRole">
+                        <option value="MEMBER">MEMBER</option>
+                        <option value="OWNER">OWNER</option>
+                    </select>
+                </label>
+                <div id="createGroupWarning" class="warning compact-state is-hidden full-span"></div>
+                <div class="confirm-modal__actions full-span">
+                    <button type="button" class="btn" onclick="closeCreateGroup()">Cancel</button>
+                    <button class="btn btn-primary">Create Group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="confirm-modal is-hidden" id="createLegalTagModal" role="dialog" aria-modal="true">
+        <div class="confirm-modal__panel confirm-modal__panel--wide">
+            <div class="panel-heading">
+                <h2>Create Legal Tag</h2>
+                <button class="btn" onclick="closeCreateLegalTag()">Cancel</button>
+            </div>
+            <form class="modal-form" onsubmit="createLegalTag(event)">
+                <label>
+                    Name
+                    <input id="legalCreateName" placeholder="osdu-demo-legaltag" required>
+                </label>
+                <label>
+                    Countries
+                    <input id="legalCreateCountries" placeholder="VN, US" value="VN" required>
+                </label>
+                <label>
+                    Contract ID
+                    <input id="legalCreateContractId" placeholder="A1234" value="A1234">
+                </label>
+                <label>
+                    Expiration Date
+                    <input id="legalCreateExpirationDate" type="date" value="2099-12-31">
+                </label>
+                <label>
+                    Originator
+                    <input id="legalCreateOriginator" placeholder="OSDU Web Console">
+                </label>
+                <label>
+                    Data Type
+                    <input id="legalCreateDataType" placeholder="Public Domain Data" value="Public Domain Data">
+                </label>
+                <label>
+                    Security Classification
+                    <select id="legalCreateSecurityClassification">
+                        <option value="Public">Public</option>
+                        <option value="Private">Private</option>
+                        <option value="Confidential">Confidential</option>
+                    </select>
+                </label>
+                <label>
+                    Export Classification
+                    <input id="legalCreateExportClassification" placeholder="EAR99" value="EAR99">
+                </label>
+                <label>
+                    Personal Data
+                    <select id="legalCreatePersonalData">
+                        <option value="No Personal Data">No Personal Data</option>
+                        <option value="Personally Identifiable">Personally Identifiable</option>
+                        <option value="Sensitive Personal Information">Sensitive Personal Information</option>
+                    </select>
+                </label>
+                <label class="full-span">
+                    Description
+                    <input id="legalCreateDescription" placeholder="Optional description">
+                </label>
+                <div class="confirm-modal__actions full-span">
+                    <button type="button" class="btn" onclick="closeCreateLegalTag()">Cancel</button>
+                    <button class="btn btn-primary">Create Legal Tag</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="confirm-modal is-hidden" id="removeGroupsModal" role="dialog" aria-modal="true">
+        <div class="confirm-modal__panel confirm-modal__panel--wide">
+            <div class="panel-heading">
+                <h2>Remove selected groups</h2>
+                <button class="btn" onclick="closeRemoveGroupsModal()">Cancel</button>
+            </div>
+            <div id="removeGroupsModalContent"></div>
+        </div>
+    </div>
+
+    <div class="toast-stack" id="toastStack"></div>
+
+    <script>
+        const partitionId = '{{ partition_id }}';
+        const currentAuthIdentity = {{ auth_identity|tojson }};
+        const dangerousGroups = new Set([
+            'users@osdu.group',
+            'users.data.root@osdu.group',
+            'users.datalake.admins@osdu.group',
+            'users.datalake.ops@osdu.group',
+            'users.datalake.delegation@osdu.group',
+            'users.datalake.impersonation@osdu.group',
+            'service.entitlements.admin@osdu.group',
+            'service.partition.admin@osdu.group',
+            'service.storage.admin@osdu.group',
+            'service.policy.admin@osdu.group',
+            'service.legal.admin@osdu.group',
+            'service.schema-service.system-admin@osdu.group'
+        ]);
+        let groups = [];
+        let legalTags = [];
+        let partitions = [];
+        let externalUsers = [];
+        let users = readStore('osdu_admin_users', []);
+        let policies = readStore('osdu_acl_policies', []);
+        let auditLogs = readStore('osdu_access_audit', []);
+        let currentGroupDetailEmail = '';
+        let currentInspectedUser = '';
+        let currentInspectedGroups = [];
+        let currentInspectedGroupSummary = {total: 0, data: 0, user: 0, service: 0, system: 0, unknown: 0};
+        let selectedUserRemoveGroups = new Set();
+        let selectedUserAddGroups = [];
+        const initialAuthReady = {{ 'true' if auth_ready else 'false' }};
+        const initialSection = {{ initial_section|tojson }};
+        const initialRecordId = {{ initial_record_id|tojson }};
+
+        const sectionMeta = {
+            dashboard: ['Access Governance', 'Governance overview'],
+            users: ['Users', 'Local workspace'],
+            partitions: ['Partitions', 'OSDU partitions'],
+            groups: ['Groups', 'Entitlements groups'],
+            legal: ['Legal Tags', 'Legal metadata'],
+            policies: ['ACL Policies', 'Local workspace'],
+            checker: ['Access Checker', 'ACL and legal check'],
+            audit: ['Audit Logs', 'Local audit']
+        };
+
+        function openAdminSection(name) {
+            document.querySelectorAll('.admin-nav-item').forEach((item) => item.classList.toggle('active', item.dataset.section === name));
+            document.querySelectorAll('.admin-section').forEach((section) => section.classList.toggle('active', section.id === `section-${name}`));
+            document.getElementById('sectionTitle').textContent = sectionMeta[name][0];
+            document.getElementById('sectionSubtitle').textContent = sectionMeta[name][1];
+            if (name === 'dashboard') refreshDashboard();
+            if (name === 'users') {
+                if (externalUsers.length) renderUsers();
+                else loadUsers();
+                ensureGroupsLoaded();
+            }
+            if (name === 'partitions') {
+                if (partitions.length) renderPartitions();
+                else loadPartitions();
+            }
+            if (name === 'groups') {
+                if (groups.length) renderGroups();
+                else loadGroups();
+            }
+            if (name === 'legal') {
+                if (legalTags.length) renderLegalTags();
+                else loadLegalTags();
+            }
+            if (name === 'policies') renderPolicies();
+            if (name === 'audit') renderAuditLogs();
+        }
+
+        async function refreshDashboard() {
+            const status = document.getElementById('dashboardStatus');
+            status.innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            try {
+                const summary = await fetchJson('/api/access-control/summary');
+                status.innerHTML = statusCards([
+                    ['Token status', summary.token_valid ? 'Ready' : 'Expired or missing'],
+                    ['Auth mode', summary.config?.auth_mode_label || summary.config?.token_grant_type || '-'],
+                    ['Identity', summary.config?.identity || '-'],
+                    ['Base URL', summary.config?.base_url || '-'],
+                    ['Partition', summary.defaults?.partition_id || partitionId]
+                ]);
+                await Promise.allSettled([loadGroups(false), loadLegalTags(false), loadPartitions(false)]);
+                updateMetrics();
+            } catch (error) {
+                status.innerHTML = '<div class="error"><strong>Cannot load data</strong><br><span>Check token, partition, or permission</span></div>';
+            }
+        }
+
+        async function loadPartitions(render = true) {
+            if (render) document.getElementById('partitionsTable').innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            try {
+                const data = await fetchJson('/api/access-control/partitions');
+                partitions = data.items || [];
+                if (render) renderPartitions();
+                if (render) addAudit('REFRESH_PARTITIONS', `${partitions.length} partitions loaded`);
+            } catch (error) {
+                partitions = [{
+                    partitionId,
+                    source: 'Configured partition',
+                    status: 'CONFIGURED',
+                    warning: error.message
+                }];
+                if (render) renderPartitions(error.message);
+            } finally {
+                updateMetrics();
+            }
+        }
+
+        function renderPartitions(warningMessage = '') {
+            const warning = warningMessage
+                ? `<div class="warning compact-state"><strong>Partition API unavailable</strong><br><span>Using configured partition. ${escapeHtml(warningMessage)}</span></div>`
+                : '';
+            document.getElementById('partitionsTable').innerHTML = warning + tableHtml(
+                ['Partition ID', 'Display Name', 'Source', 'Status'],
+                partitions.map((item) => [
+                    escapeHtml(item.partitionId || item.id || ''),
+                    escapeHtml(item.displayName || item.name || item.partitionId || ''),
+                    escapeHtml(item.source || 'OSDU Partition service'),
+                    badge(item.status || 'ACTIVE')
+                ])
+            );
+        }
+
+        function syncLocalUsers() {
+            addAudit('REFRESH_USERS', 'Local user registry rendered');
+            renderUsers();
+        }
+
+        async function loadUsers(render = true) {
+            if (render) document.getElementById('usersTable').innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            document.getElementById('usersWarning').innerHTML = '';
+            try {
+                const data = await fetchJson('/api/access-control/users');
+                externalUsers = data.items || [];
+                if (data.warning) {
+                    document.getElementById('usersWarning').innerHTML = `<div class="warning compact-state">${escapeHtml(data.warning)}</div>`;
+                }
+                if (render) addAudit('SYNC_EXTERNAL_USERS', `${externalUsers.length} external users loaded`);
+            } catch (error) {
+                externalUsers = [];
+                document.getElementById('usersWarning').innerHTML = `<div class="warning compact-state"><strong>External user sync unavailable</strong><br><span>${escapeHtml(error.message)}. Local registry is still available.</span></div>`;
+            } finally {
+                renderUsers();
+                updateMetrics();
+            }
+        }
+
+        function createLocalUser(event) {
+            event.preventDefault();
+            const email = field('userEmail').toLowerCase();
+            users = users.filter((user) => user.email !== email);
+            users.push({email, username: field('userName') || email.split('@')[0], fullName: field('userFullName'), company: field('userCompany'), department: field('userDepartment'), source: 'LOCAL_WORKSPACE', status: 'ACTIVE'});
+            writeStore('osdu_admin_users', users);
+            event.target.reset();
+            addAudit('CREATE_LOCAL_USER', email);
+            renderUsers();
+        }
+
+        function renderUsers() {
+            const search = field('userSearch').toLowerCase();
+            const allUsers = mergedUsers();
+            syncSelectOptions('userSourceFilter', uniqueValues(allUsers.map((user) => user.source)), 'All sources');
+            syncSelectOptions('userStatusFilter', uniqueValues(allUsers.map((user) => user.status)), 'All statuses');
+            const source = field('userSourceFilter') || 'ALL';
+            const status = field('userStatusFilter') || 'ALL';
+            const filtered = allUsers.filter((user) => {
+                const matchesSearch = !search || JSON.stringify(user).toLowerCase().includes(search);
+                const matchesSource = source === 'ALL' || user.source === source;
+                const matchesStatus = status === 'ALL' || user.status === status;
+                return matchesSearch && matchesSource && matchesStatus;
+            });
+            document.getElementById('userCount').textContent = `${filtered.length} / ${allUsers.length} users`;
+            document.getElementById('usersTable').innerHTML = tableHtml(
+                ['Email', 'Full Name', 'Company', 'Department', 'Source', 'Status', 'Action'],
+                filtered.map((user) => [
+                    escapeHtml(user.email),
+                    escapeHtml(user.fullName || ''),
+                    escapeHtml(user.company || ''),
+                    escapeHtml(user.department || ''),
+                    escapeHtml(user.source),
+                    badge(user.status),
+                    user.email ? `<button class="btn btn-sm" onclick='viewUserGroups(${JSON.stringify(user.email)})'>View Groups</button>` : ''
+                ])
+            );
+        }
+
+        async function loadUserGroups(event) {
+            if (event) event.preventDefault();
+            const email = field('userInspectEmail').toLowerCase();
+            if (!email) return;
+            if (event) document.getElementById('userGroupRemoveResult').innerHTML = '';
+            currentInspectedUser = email;
+            currentInspectedGroups = [];
+            selectedUserRemoveGroups = new Set();
+            const result = document.getElementById('userGroupResult');
+            result.innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            document.getElementById('userGroupSummary').classList.add('is-hidden');
+            try {
+                const data = await fetchJson(`/api/access-control/users/${encodeURIComponent(email)}/groups?partition_id=${encodeURIComponent(partitionId)}`);
+                renderUserGroups(data);
+                addAudit('VIEW_USER_GROUPS', email);
+            } catch (error) {
+                const message = error.message.includes('403')
+                    ? 'Current token cannot inspect user group membership.'
+                    : error.message;
+                result.innerHTML = `<div class="warning compact-state">${escapeHtml(message)}</div>`;
+            }
+        }
+
+        function viewUserGroups(email) {
+            closeGroupDetail();
+            openAdminSection('users');
+            document.getElementById('userSearch').value = email;
+            document.getElementById('userInspectEmail').value = email;
+            clearGroupPicker();
+            renderUsers();
+            loadUserGroups();
+        }
+
+        function renderUserGroups(data) {
+            currentInspectedUser = (data.user || field('userInspectEmail') || '').toLowerCase();
+            currentInspectedGroups = data.groups || [];
+            currentInspectedGroupSummary = data.summary || {total: 0, data: 0, user: 0, service: 0, system: 0, unknown: 0};
+            selectedUserRemoveGroups = new Set();
+            renderCurrentUserGroups();
+        }
+
+        function renderCurrentUserGroups() {
+            const summary = currentInspectedGroupSummary || {total: 0, data: 0, user: 0, service: 0, system: 0, unknown: 0};
+            document.getElementById('userGroupSummary').classList.remove('is-hidden');
+            document.getElementById('userGroupTotal').textContent = summary.total || 0;
+            document.getElementById('userGroupData').textContent = summary.data || 0;
+            document.getElementById('userGroupUser').textContent = summary.user || 0;
+            document.getElementById('userGroupService').textContent = summary.service || 0;
+            document.getElementById('userGroupSystem').textContent = summary.system || 0;
+            document.getElementById('userGroupUnknown').textContent = summary.unknown || 0;
+            const inspectedGroups = currentInspectedGroups || [];
+            const heading = `<div class="selected-user-line">User: <strong>${escapeHtml(currentInspectedUser || field('userInspectEmail'))}</strong></div>`;
+            if (!inspectedGroups.length) {
+                document.getElementById('userGroupResult').innerHTML = heading + '<div class="empty-state">No groups found for this user.</div>';
+                return;
+            }
+            const selectedCount = selectedUserRemoveGroups.size;
+            document.getElementById('userGroupResult').innerHTML = heading + `
+                <div class="user-group-toolbar">
+                    <span id="userGroupSelectedCount">${selectedCount} selected</span>
+                    <button class="btn btn-danger" ${selectedCount ? '' : 'disabled'} onclick="openRemoveGroupsConfirm()">
+                        Remove selected groups${selectedCount ? ` (${selectedCount})` : ''}
+                    </button>
+                </div>
+            ` + userGroupsMembershipTable(inspectedGroups);
+            const selectAll = document.getElementById('userGroupSelectAll');
+            if (selectAll) {
+                selectAll.checked = selectedCount > 0 && selectedCount === inspectedGroups.length;
+                selectAll.indeterminate = selectedCount > 0 && selectedCount < inspectedGroups.length;
+            }
+        }
+
+        function userGroupsMembershipTable(inspectedGroups) {
+            return `
+                <div class="table-wrap">
+                    <table class="data-table admin-table">
+                        <thead>
+                            <tr>
+                                <th class="checkbox-cell"><input type="checkbox" id="userGroupSelectAll" aria-label="Select all groups" onchange="toggleAllUserGroups(this.checked)"></th>
+                                <th>GROUP</th>
+                                <th>TYPE</th>
+                                <th>ROLE</th>
+                                <th>DESCRIPTION</th>
+                                <th>SOURCE</th>
+                                <th>ACTION</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${inspectedGroups.map((group) => {
+                                const groupName = group.name || group.groupName || '';
+                                const checked = selectedUserRemoveGroups.has(groupName) ? 'checked' : '';
+                                return `
+                                    <tr>
+                                        <td class="checkbox-cell"><input type="checkbox" ${checked} aria-label="Select ${escapeHtml(groupName)}" onchange='toggleUserGroupSelection(${JSON.stringify(groupName)}, this.checked)'></td>
+                                        <td>${escapeHtml(groupName)}</td>
+                                        <td>${badge(group.type || 'UNKNOWN')}</td>
+                                        <td>${badge(group.role || 'MEMBER')}</td>
+                                        <td>${escapeHtml(group.description || '')}</td>
+                                        <td>${escapeHtml(group.source || 'OSDU_ENTITLEMENTS')}</td>
+                                        <td><button class="btn btn-sm" onclick='openGroupDetail(${JSON.stringify(groupName)})'>View group detail</button></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function recalculateCurrentInspectedSummary() {
+            const inspectedGroups = currentInspectedGroups || [];
+            currentInspectedGroupSummary = {
+                total: inspectedGroups.length,
+                data: inspectedGroups.filter((group) => group.type === 'DATA').length,
+                user: inspectedGroups.filter((group) => group.type === 'USER').length,
+                service: inspectedGroups.filter((group) => group.type === 'SERVICE').length,
+                system: inspectedGroups.filter((group) => group.type === 'SYSTEM').length,
+                unknown: inspectedGroups.filter((group) => !['DATA', 'USER', 'SERVICE', 'SYSTEM'].includes(group.type)).length
+            };
+        }
+
+        function inferGroupTypeClient(groupEmail) {
+            const lowered = String(groupEmail || '').toLowerCase();
+            if (lowered.startsWith('data.')) return 'DATA';
+            if (lowered.startsWith('service.')) return 'SERVICE';
+            if (lowered.startsWith('users.') || /^users@[a-z0-9._-]+\.group$/.test(lowered)) return 'USER';
+            if (lowered.startsWith('notification.') || lowered.startsWith('partition.') || lowered.startsWith('cron.')) return 'SYSTEM';
+            return 'UNKNOWN';
+        }
+
+        function groupMetadataForEmail(groupEmail) {
+            const known = groups.find((item) => item.groupEmail === groupEmail) || {};
+            return {
+                name: groupEmail,
+                groupName: known.groupName || groupEmail.split('@')[0],
+                type: known.groupType || inferGroupTypeClient(groupEmail),
+                role: 'MEMBER',
+                description: known.description || '',
+                source: 'PENDING'
+            };
+        }
+
+        function toggleAllUserGroups(checked) {
+            selectedUserRemoveGroups = checked
+                ? new Set(currentInspectedGroups.map((group) => group.name || group.groupName || '').filter(Boolean))
+                : new Set();
+            renderCurrentUserGroups();
+        }
+
+        function toggleUserGroupSelection(groupName, checked) {
+            if (checked) {
+                selectedUserRemoveGroups.add(groupName);
+            } else {
+                selectedUserRemoveGroups.delete(groupName);
+            }
+            renderCurrentUserGroups();
+        }
+
+        function selectedGroupsForRemoval() {
+            return currentInspectedGroups
+                .map((group) => group.name || group.groupName || '')
+                .filter((groupName) => selectedUserRemoveGroups.has(groupName));
+        }
+
+        function isDangerousGroup(groupName) {
+            return dangerousGroups.has(String(groupName || '').toLowerCase());
+        }
+
+        function openRemoveGroupsConfirm() {
+            const selectedGroups = selectedGroupsForRemoval();
+            if (!currentInspectedUser || !selectedGroups.length) return;
+            const dangerous = selectedGroups.filter(isDangerousGroup);
+            const selfDanger = dangerous.length > 0 && String(currentAuthIdentity || '').toLowerCase() === currentInspectedUser;
+            const modal = document.getElementById('removeGroupsModal');
+            const content = document.getElementById('removeGroupsModalContent');
+            content.innerHTML = `
+                <div class="summary-grid remove-summary-grid">
+                    ${summaryItem('Target user', currentInspectedUser)}
+                    ${summaryItem('Partition ID', partitionId)}
+                    ${summaryItem('Groups to remove', selectedGroups.length)}
+                </div>
+                <p><strong>Removing these groups may immediately revoke the user's access. Continue?</strong></p>
+                ${dangerous.length ? `<div class="warning compact-state"><strong>Dangerous group detected.</strong><br>This may remove admin/root/partition access.</div>` : ''}
+                <div class="remove-group-list">
+                    <strong>Groups</strong>
+                    <ul>${selectedGroups.map((groupName) => `<li class="${isDangerousGroup(groupName) ? 'dangerous-item' : ''}">${escapeHtml(groupName)}</li>`).join('')}</ul>
+                </div>
+                ${selfDanger ? `
+                    <label class="checkbox-row dangerous-confirm-row">
+                        <input type="checkbox" id="dangerousSelfRemoveConfirm" onchange="syncRemoveGroupsConfirmButton()">
+                        I understand this may remove my own admin access.
+                    </label>
+                ` : ''}
+                <div class="confirm-modal__actions">
+                    <button class="btn" onclick="closeRemoveGroupsModal()">Cancel</button>
+                    <button class="btn btn-danger" id="confirmRemoveGroupsBtn" ${selfDanger ? 'disabled' : ''} onclick="removeSelectedUserGroups()">Remove groups</button>
+                </div>
+            `;
+            modal.classList.remove('is-hidden');
+        }
+
+        function syncRemoveGroupsConfirmButton() {
+            const button = document.getElementById('confirmRemoveGroupsBtn');
+            const confirm = document.getElementById('dangerousSelfRemoveConfirm');
+            if (button && confirm) button.disabled = !confirm.checked;
+        }
+
+        function closeRemoveGroupsModal() {
+            document.getElementById('removeGroupsModal').classList.add('is-hidden');
+        }
+
+        async function removeSelectedUserGroups() {
+            const selectedGroups = selectedGroupsForRemoval();
+            const button = document.getElementById('confirmRemoveGroupsBtn');
+            if (!currentInspectedUser || !selectedGroups.length) return;
+            const confirmDangerousSelfRemove = !!document.getElementById('dangerousSelfRemoveConfirm')?.checked;
+            closeRemoveGroupsModal();
+            selectedUserRemoveGroups = new Set();
+            currentInspectedGroups = currentInspectedGroups.filter((group) => !selectedGroups.includes(group.name || group.groupName || ''));
+            recalculateCurrentInspectedSummary();
+            renderCurrentUserGroups();
+            renderBackgroundOperationStarted('Remove started', selectedGroups, 'Removing selected groups in the background.');
+            showToast(`Remove started for ${selectedGroups.length} group(s)`, 'success');
+            addAudit('REMOVE_USER_GROUPS_STARTED', `${currentInspectedUser}: ${selectedGroups.length} group(s)`);
+
+            fetchJson(`/api/access-control/users/${encodeURIComponent(currentInspectedUser)}/groups`, {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    partition_id: partitionId,
+                    groups: selectedGroups,
+                    confirm_dangerous_self_remove: confirmDangerousSelfRemove
+                })
+            }).then((data) => {
+                renderRemoveGroupsResult(data);
+                showToast(`Remove completed: ${data.succeeded}/${data.requested} succeeded`, data.failed ? 'warning' : 'success');
+                addAudit('REMOVE_USER_GROUPS_COMPLETED', `${currentInspectedUser}: ${data.succeeded}/${data.requested} succeeded`);
+                loadUserGroups();
+            }).catch((error) => {
+                renderOperationError('Remove failed', error.message || 'Current token cannot remove group membership');
+                showToast(entitlementsUiMessage(error, 'Current token cannot remove group membership'), 'error');
+                loadUserGroups();
+            });
+        }
+
+        function renderBackgroundOperationStarted(title, groupNames, message) {
+            document.getElementById('userGroupRemoveResult').innerHTML = `
+                <div class="warning compact-state">
+                    <strong>${escapeHtml(title)}:</strong>
+                    ${escapeHtml(message)}
+                </div>
+                ${tableHtml(
+                    ['GROUP', 'STATUS', 'MESSAGE'],
+                    groupNames.map((groupName) => [
+                        escapeHtml(groupName),
+                        badge('PENDING'),
+                        'Running in background'
+                    ])
+                )}
+            `;
+        }
+
+        function renderOperationError(title, message) {
+            document.getElementById('userGroupRemoveResult').innerHTML = `
+                <div class="error compact-state">
+                    <strong>${escapeHtml(title)}:</strong>
+                    ${escapeHtml(message)}
+                </div>
+            `;
+        }
+
+        function renderAddGroupsResult(data) {
+            document.getElementById('userGroupRemoveResult').innerHTML = `
+                <div class="${data.failed ? 'warning' : 'success'} compact-state">
+                    <strong>Add completed:</strong>
+                    Requested: ${escapeHtml(data.requested || 0)} | Succeeded: ${escapeHtml(data.succeeded || 0)} | Failed: ${escapeHtml(data.failed || 0)}
+                </div>
+                ${tableHtml(
+                    ['GROUP', 'STATUS', 'MESSAGE'],
+                    (data.results || []).map((item) => [
+                        escapeHtml(item.group || ''),
+                        badge(item.ok ? 'SUCCESS' : 'FAILED'),
+                        escapeHtml(item.ok ? 'Added' : item.error || 'Failed')
+                    ])
+                )}
+            `;
+        }
+
+        function addInspectedUserGroupsInBackground(email, groupEmails, role) {
+            Promise.allSettled(groupEmails.map((groupEmail) => addMemberToGroup(groupEmail, email, role)))
+                .then((settledResults) => {
+                    const results = settledResults.map((result, index) => ({
+                        group: groupEmails[index],
+                        ok: result.status === 'fulfilled',
+                        error: result.status === 'rejected' ? result.reason?.message || 'Failed' : ''
+                    }));
+                    const succeeded = results.filter((item) => item.ok).length;
+                    const payload = {
+                        user: email,
+                        partition_id: partitionId,
+                        requested: groupEmails.length,
+                        succeeded,
+                        failed: groupEmails.length - succeeded,
+                        results
+                    };
+                    renderAddGroupsResult(payload);
+                    showToast(`Add completed: ${succeeded}/${groupEmails.length} succeeded`, payload.failed ? 'warning' : 'success');
+                    addAudit('ADD_USER_GROUPS_COMPLETED', `${email}: ${succeeded}/${groupEmails.length} succeeded`);
+                    loadUserGroups();
+                })
+                .catch((error) => {
+                    renderOperationError('Add failed', error.message || 'Current token cannot manage group members');
+                    showToast(entitlementsUiMessage(error, 'Current token cannot manage group members'), 'error');
+                    loadUserGroups();
+                });
+        }
+
+        async function addMemberFromGroupDetail(event) {
+            event.preventDefault();
+            const emails = splitList(field('groupMemberEmail'));
+            const role = field('groupMemberRole') || 'MEMBER';
+            if (!currentGroupDetailEmail || !emails.length) return;
+            const input = document.getElementById('groupMemberEmail');
+            if (input) input.value = '';
+            showToast(`Add started for ${emails.length} member(s)`, 'success');
+            Promise.allSettled(emails.map((email) => addMemberToGroup(currentGroupDetailEmail, email, role)))
+                .then((results) => {
+                    const succeeded = results.filter((result) => result.status === 'fulfilled').length;
+                    showToast(`Add completed: ${succeeded}/${emails.length} succeeded`, succeeded === emails.length ? 'success' : 'warning');
+                    openGroupDetail(currentGroupDetailEmail);
+                })
+                .catch((error) => showToast(entitlementsUiMessage(error, 'Current token cannot manage group members'), 'error'));
+        }
+
+        async function addInspectedUserToGroup(event) {
+            event.preventDefault();
+            const email = field('userInspectEmail').toLowerCase();
+            flushGroupPickerInput();
+            const groupEmails = [...selectedUserAddGroups];
+            const role = field('userAddGroupRole') || 'MEMBER';
+            if (!email || !groupEmails.length) {
+                showToast('User email and group name(s) are required', 'warning');
+                return;
+            }
+            clearGroupPicker();
+            document.getElementById('userGroupRemoveResult').innerHTML = '';
+            if (currentInspectedUser === email) {
+                const existing = new Set(currentInspectedGroups.map((group) => group.name || group.groupName || ''));
+                const optimisticGroups = groupEmails
+                    .filter((groupEmail) => !existing.has(groupEmail))
+                    .map((groupEmail) => ({...groupMetadataForEmail(groupEmail), role, source: 'PENDING_ADD'}));
+                currentInspectedGroups = currentInspectedGroups.concat(optimisticGroups);
+                recalculateCurrentInspectedSummary();
+                renderCurrentUserGroups();
+            }
+            renderBackgroundOperationStarted('Add started', groupEmails, 'Adding selected groups in the background.');
+            showToast(`Add started for ${groupEmails.length} group(s)`, 'success');
+            addAudit('ADD_USER_GROUPS_STARTED', `${email}: ${groupEmails.length} group(s)`);
+            addInspectedUserGroupsInBackground(email, groupEmails, role);
+        }
+
+        function renderRemoveGroupsResult(data) {
+            document.getElementById('userGroupRemoveResult').innerHTML = `
+                <div class="${data.failed ? 'warning' : 'success'} compact-state">
+                    <strong>Remove completed:</strong>
+                    Requested: ${escapeHtml(data.requested || 0)} | Succeeded: ${escapeHtml(data.succeeded || 0)} | Failed: ${escapeHtml(data.failed || 0)}
+                </div>
+                ${tableHtml(
+                    ['GROUP', 'STATUS', 'MESSAGE'],
+                    (data.results || []).map((item) => [
+                        escapeHtml(item.group || ''),
+                        badge(item.ok ? 'SUCCESS' : 'FAILED'),
+                        escapeHtml(item.ok ? 'Removed' : `${item.status || ''} ${item.error || 'Failed'}`.trim())
+                    ])
+                )}
+            `;
+        }
+
+        function mergedUsers() {
+            const byEmail = new Map();
+            users.forEach((user) => {
+                if (user.email) byEmail.set(user.email.toLowerCase(), user);
+            });
+            externalUsers.forEach((user) => {
+                if (user.email) byEmail.set(user.email.toLowerCase(), user);
+            });
+            return Array.from(byEmail.values()).sort((a, b) => String(a.email || '').localeCompare(String(b.email || '')));
+        }
+
+        async function loadGroups(render = true) {
+            if (render) document.getElementById('groupsTable').innerHTML = '<div class="skeleton-list"><span></span><span></span><span></span></div>';
+            try {
+                const data = await fetchJson(`/api/access-control/groups?partition_id=${encodeURIComponent(partitionId)}`);
+                groups = data.items || [];
+                syncGroupPicker();
+                if (render) renderGroups();
+                if (render) addAudit('REFRESH_GROUPS', `${groups.length} groups loaded`);
+            } catch (error) {
+                if (render) document.getElementById('groupsTable').innerHTML = '<div class="error"><strong>Cannot load groups</strong><br><span>Check token, partition, or permission</span></div>';
+            } finally {
+                updateMetrics();
+            }
+        }
+
+        function renderGroups() {
+            updateGroupSummary();
+            const term = field('groupSearch').toLowerCase();
+            const type = field('groupTypeFilter');
+            syncSelectOptions('groupSourceFilter', uniqueValues(groups.map((group) => group.source)), 'All sources');
+            const source = field('groupSourceFilter') || 'ALL';
+            const filtered = groups.filter((group) => {
+                const text = `${group.groupEmail || ''} ${group.groupName || ''} ${group.description || ''}`.toLowerCase();
+                return (!term || text.includes(term)) && (type === 'ALL' || group.groupType === type) && (source === 'ALL' || group.source === source);
+            });
+            document.getElementById('groupCount').textContent = `${filtered.length} / ${groups.length} groups`;
+            document.getElementById('groupsTable').innerHTML = tableHtml(
+                ['Group', 'Type', 'Source', 'Description', 'Actions'],
+                filtered.map((group) => [
+                    escapeHtml(group.groupEmail || group.groupName || ''),
+                    badge(group.groupType || 'UNKNOWN'),
+                    escapeHtml(group.source || 'OSDU'),
+                    escapeHtml(group.description || ''),
+                    `<div class="row-actions"><button class="btn btn-sm" onclick='openGroupDetail(${JSON.stringify(group.groupEmail || '')})'>View</button><button class="btn btn-sm" onclick='openGroupDetail(${JSON.stringify(group.groupEmail || '')}, true)'>Add member</button></div>`
+                ])
+            );
+        }
+
+        function syncGroupPicker() {
+            renderGroupPickerSuggestions();
+        }
+
+        async function ensureGroupsLoaded() {
+            if (groups.length) {
+                syncGroupPicker();
+                return;
+            }
+            await loadGroups(false);
+        }
+
+        function knownGroupEmails() {
+            return uniqueValues(groups.map((group) => group.groupEmail));
+        }
+
+        function matchedGroupOptions(query) {
+            const normalizedQuery = String(query || '').trim().toLowerCase();
+            return knownGroupEmails()
+                .filter((email) => !selectedUserAddGroups.includes(email))
+                .map((email) => {
+                    const group = groups.find((item) => item.groupEmail === email) || {};
+                    const haystack = [email, group.groupType, group.description].filter(Boolean).join(' ').toLowerCase();
+                    const emailLower = email.toLowerCase();
+                    let rank = 0;
+                    if (normalizedQuery) {
+                        if (emailLower.startsWith(normalizedQuery)) rank = 0;
+                        else if (emailLower.includes(normalizedQuery)) rank = 1;
+                        else if (haystack.includes(normalizedQuery)) rank = 2;
+                        else return null;
+                    }
+                    return {email, group, rank};
+                })
+                .filter(Boolean)
+                .sort((a, b) => a.rank - b.rank || a.email.localeCompare(b.email));
+        }
+
+        function renderGroupPickerChips() {
+            const chips = document.getElementById('userAddGroupChips');
+            if (!chips) return;
+            chips.innerHTML = selectedUserAddGroups.map((groupEmail) => `
+                <span class="token-chip">
+                    <span>${escapeHtml(groupEmail)}</span>
+                    <button type="button" aria-label="Remove ${escapeHtml(groupEmail)}" onclick="removeGroupPickerToken('${escapeJs(groupEmail)}')">x</button>
+                </span>
+            `).join('');
+        }
+
+        function openGroupPicker() {
+            ensureGroupsLoaded();
+            renderGroupPickerSuggestions(true);
+        }
+
+        function hideGroupPicker() {
+            const menu = document.getElementById('userAddGroupSuggestions');
+            if (menu) menu.classList.add('is-hidden');
+        }
+
+        function renderGroupPickerSuggestions(forceOpen = false) {
+            const menu = document.getElementById('userAddGroupSuggestions');
+            const input = document.getElementById('userAddGroupSearch');
+            if (!menu || !input) return;
+            const query = input.value.trim();
+            const options = matchedGroupOptions(query).slice(0, 12);
+            if (!forceOpen && !query && document.activeElement !== input) {
+                menu.classList.add('is-hidden');
+                return;
+            }
+            if (!groups.length) {
+                menu.innerHTML = '<div class="token-picker__empty">Loading groups or no groups are available yet.</div>';
+            } else if (!options.length) {
+                const raw = input.value.trim();
+                menu.innerHTML = `<div class="token-picker__empty">${raw ? `No matching group. Press Enter to add "${escapeHtml(raw)}".` : 'No more groups to add.'}</div>`;
+            } else {
+                menu.innerHTML = options.map(({email, group}) => {
+                    return `
+                        <button type="button" class="token-picker__option" onclick="addGroupPickerTokens(['${escapeJs(email)}'])">
+                            <strong>${escapeHtml(email)}</strong>
+                            <span>${escapeHtml([group.groupType, group.description].filter(Boolean).join(' - '))}</span>
+                        </button>
+                    `;
+                }).join('');
+            }
+            menu.classList.remove('is-hidden');
+        }
+
+        function handleGroupPickerKeydown(event) {
+            const input = event.target;
+            if (event.key === 'Enter' || event.key === 'Tab' || event.key === ',') {
+                const raw = input.value.trim();
+                if (raw) {
+                    event.preventDefault();
+                    const tokens = splitList(raw);
+                    if (tokens.length === 1) {
+                        const exact = knownGroupEmails().find((email) => email.toLowerCase() === raw.toLowerCase());
+                        const suggested = exact || matchedGroupOptions(raw)[0]?.email || raw;
+                        addGroupPickerTokens([suggested]);
+                    } else {
+                        addGroupPickerTokens(tokens);
+                    }
+                }
+                return;
+            }
+            if (event.key === 'Backspace' && !input.value && selectedUserAddGroups.length) {
+                selectedUserAddGroups = selectedUserAddGroups.slice(0, -1);
+                renderGroupPickerChips();
+                renderGroupPickerSuggestions(true);
+            }
+            if (event.key === 'Escape') hideGroupPicker();
+        }
+
+        function handleGroupPickerPaste(event) {
+            const text = event.clipboardData?.getData('text') || '';
+            if (!text || !/[\s,;]/.test(text)) return;
+            event.preventDefault();
+            addGroupPickerTokens(splitList(text));
+        }
+
+        function addGroupPickerTokens(values) {
+            const canonicalGroups = knownGroupEmails();
+            const canonicalByLower = new Map(canonicalGroups.map((email) => [email.toLowerCase(), email]));
+            const next = [...selectedUserAddGroups];
+            values.forEach((value) => {
+                const cleaned = String(value || '').trim().replace(/,$/, '');
+                if (!cleaned) return;
+                const canonical = canonicalByLower.get(cleaned.toLowerCase()) || cleaned;
+                if (!next.includes(canonical)) next.push(canonical);
+            });
+            selectedUserAddGroups = next;
+            const input = document.getElementById('userAddGroupSearch');
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+            renderGroupPickerChips();
+            renderGroupPickerSuggestions(true);
+        }
+
+        function removeGroupPickerToken(groupEmail) {
+            selectedUserAddGroups = selectedUserAddGroups.filter((item) => item !== groupEmail);
+            renderGroupPickerChips();
+            renderGroupPickerSuggestions(true);
+        }
+
+        function flushGroupPickerInput() {
+            const pending = splitList(field('userAddGroupSearch'));
+            if (pending.length) addGroupPickerTokens(pending);
+        }
+
+        function clearGroupPicker() {
+            selectedUserAddGroups = [];
+            const input = document.getElementById('userAddGroupSearch');
+            if (input) input.value = '';
+            renderGroupPickerChips();
+            hideGroupPicker();
+        }
+
+        function updateGroupSummary() {
+            document.getElementById('groupAllCount').textContent = groups.length;
+            document.getElementById('groupDataCount').textContent = groups.filter((group) => group.groupType === 'DATA').length;
+            document.getElementById('groupServiceCount').textContent = groups.filter((group) => group.groupType === 'SERVICE').length;
+            document.getElementById('groupUserCount').textContent = groups.filter((group) => group.groupType === 'USER').length;
+        }
+
+        async function openGroupDetail(groupEmail, focusAdd = false) {
+            const group = groups.find((item) => item.groupEmail === groupEmail) || {};
+            currentGroupDetailEmail = groupEmail;
+            const modal = document.getElementById('groupDetailModal');
+            const content = document.getElementById('groupDetailContent');
+            modal.classList.remove('is-hidden');
+            content.innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            try {
+                const encoded = encodeURIComponent(groupEmail);
+                const data = await fetchJson(`/api/access-control/groups/${encoded}/members?partition_id=${encodeURIComponent(partitionId)}`);
+                const members = data.items || [];
+                content.innerHTML = groupDetailHtml(group, groupEmail, members);
+                if (focusAdd) document.getElementById('groupMemberEmail')?.focus();
+                addAudit('VIEW_GROUP_DETAIL', groupEmail);
+            } catch (error) {
+                content.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function groupDetailHtml(group, groupEmail, members) {
+            return `
+                    <div class="summary-grid">
+                        ${summaryItem('Group name', group.groupName || groupEmail)}
+                        ${summaryItem('Group email', groupEmail)}
+                        ${summaryItem('Type', group.groupType || 'UNKNOWN')}
+                        ${summaryItem('Source', group.source || 'OSDU')}
+                        ${summaryItem('Status', group.status || 'ACTIVE')}
+                        ${summaryItem('Description', group.description || 'Not provided')}
+                        ${summaryItem('Members count', members.length)}
+                    </div>
+                    <form class="inline-admin-form compact-form" onsubmit="addMemberFromGroupDetail(event)">
+                        <input id="groupMemberEmail" placeholder="one or many emails/service accounts" required>
+                        <select id="groupMemberRole">
+                            <option value="MEMBER">MEMBER</option>
+                            <option value="OWNER">OWNER</option>
+                        </select>
+                        <button class="btn btn-primary">Add member</button>
+                    </form>
+                    <h3>Members</h3>
+                    ${tableHtml(['Member', 'Role', 'Type', 'Action'], members.map((item) => [
+                        escapeHtml(item.memberEmail || ''),
+                        badge(item.role || 'MEMBER'),
+                        escapeHtml(item.memberType || ''),
+                        item.memberEmail ? `<button class="btn btn-sm" onclick='viewUserGroups(${JSON.stringify(item.memberEmail || '')})'>View user groups</button>` : ''
+                    ]))}
+                    <h3>Owners</h3>
+                    <p class="muted">Not returned by current endpoint.</p>
+                `;
+        }
+
+        function closeGroupDetail() {
+            document.getElementById('groupDetailModal').classList.add('is-hidden');
+            currentGroupDetailEmail = '';
+        }
+
+        function openCreateGroup() {
+            document.getElementById('createGroupModal').classList.remove('is-hidden');
+            document.getElementById('createGroupName').focus();
+            validateCreateGroupPrefix();
+        }
+
+        function closeCreateGroup() {
+            document.getElementById('createGroupModal').classList.add('is-hidden');
+        }
+
+        function validateCreateGroupPrefix() {
+            const type = field('createGroupType');
+            const name = field('createGroupName').toLowerCase();
+            const warning = document.getElementById('createGroupWarning');
+            const expected = type === 'DATA' ? 'data.' : type === 'USER' ? 'users.' : 'service.';
+            if (name && !name.startsWith(expected)) {
+                warning.textContent = `${type} groups usually start with ${expected}. You can still create it if this is intentional.`;
+                warning.classList.remove('is-hidden');
+            } else {
+                warning.textContent = '';
+                warning.classList.add('is-hidden');
+            }
+        }
+
+        async function createEntitlementsGroup(event) {
+            event.preventDefault();
+            const name = field('createGroupName');
+            if (!name || !name.includes('@')) {
+                showToast('Group name must include @', 'error');
+                return;
+            }
+            const role = field('createGroupInitialRole') || 'MEMBER';
+            const initialMembers = splitList(field('createGroupMembers')).map((email) => ({email, role}));
+            try {
+                const result = await fetchJson('/api/access-control/groups', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        partitionId,
+                        name,
+                        type: field('createGroupType'),
+                        description: field('createGroupDescription'),
+                        initialMembers
+                    })
+                });
+                closeCreateGroup();
+                document.querySelector('#createGroupModal form').reset();
+                await loadGroups(false);
+                renderGroups();
+                showToast(result.partial ? 'Group created; some members were not added' : 'Group created', result.partial ? 'warning' : 'success');
+                addAudit('CREATE_ENTITLEMENTS_GROUP', name);
+            } catch (error) {
+                showToast(entitlementsUiMessage(error, 'Current token cannot create Entitlements groups'), 'error');
+            }
+        }
+
+        async function addMemberToGroup(groupEmail, email, role) {
+            return fetchJson(`/api/access-control/groups/${encodeURIComponent(groupEmail)}/members`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({partitionId, email, role})
+            });
+        }
+
+        function entitlementsUiMessage(error, forbiddenMessage) {
+            const message = error.message || '';
+            if (message.includes('403') || message.includes('admin permission')) return forbiddenMessage;
+            if (message.includes('409')) return 'Member or group already exists';
+            return message || 'OSDU Entitlements error';
+        }
+
+        function showToast(message, type = 'success') {
+            const stack = document.getElementById('toastStack');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            stack.appendChild(toast);
+            setTimeout(() => toast.remove(), 4200);
+        }
+
+        function openCreateLegalTag() {
+            document.getElementById('createLegalTagModal').classList.remove('is-hidden');
+            document.getElementById('legalCreateName').focus();
+        }
+
+        function closeCreateLegalTag() {
+            document.getElementById('createLegalTagModal').classList.add('is-hidden');
+        }
+
+        async function createLegalTag(event) {
+            event.preventDefault();
+            const name = field('legalCreateName');
+            const countries = splitList(field('legalCreateCountries'));
+            if (!name || !countries.length) {
+                showToast('Legal tag name and countries are required', 'warning');
+                return;
+            }
+            const payload = {
+                partition_id: partitionId,
+                name,
+                countries,
+                contractId: field('legalCreateContractId') || 'A1234',
+                expirationDate: field('legalCreateExpirationDate') || '2099-12-31',
+                originator: field('legalCreateOriginator') || 'OSDU Web Console',
+                dataType: field('legalCreateDataType') || 'Public Domain Data',
+                securityClassification: field('legalCreateSecurityClassification') || 'Public',
+                exportClassification: field('legalCreateExportClassification') || 'EAR99',
+                personalData: field('legalCreatePersonalData') || 'No Personal Data',
+                description: field('legalCreateDescription')
+            };
+            try {
+                const result = await fetchJson('/api/access-control/legal-tags', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                closeCreateLegalTag();
+                document.querySelector('#createLegalTagModal form').reset();
+                document.getElementById('legalCreateCountries').value = 'VN';
+                document.getElementById('legalCreateContractId').value = 'A1234';
+                document.getElementById('legalCreateExpirationDate').value = '2099-12-31';
+                document.getElementById('legalCreateDataType').value = 'Public Domain Data';
+                document.getElementById('legalCreateExportClassification').value = 'EAR99';
+                legalTags = [result.legalTag || {name, countryOfOrigin: countries, status: 'ACTIVE'}, ...legalTags.filter((tag) => tag.name !== name)];
+                document.getElementById('legalTagMutationResult').innerHTML = `<div class="success compact-state"><strong>Legal Tag created:</strong> ${escapeHtml(name)}</div>`;
+                renderLegalTags();
+                loadLegalTags(false);
+                showToast('Legal Tag created', 'success');
+                addAudit('CREATE_LEGAL_TAG', name);
+            } catch (error) {
+                showToast(error.message || 'Current token cannot create Legal Tags', 'error');
+            }
+        }
+
+        async function deleteLegalTag(name) {
+            if (!name) return;
+            const confirmed = window.confirm(`Delete Legal Tag "${name}"?\n\nRecords using this tag may be affected. Continue?`);
+            if (!confirmed) return;
+            const previousTags = [...legalTags];
+            legalTags = legalTags.filter((tag) => tag.name !== name);
+            renderLegalTags();
+            document.getElementById('legalTagMutationResult').innerHTML = `<div class="warning compact-state"><strong>Delete started:</strong> ${escapeHtml(name)}</div>`;
+            try {
+                await fetchJson(`/api/access-control/legal-tags/${encodeURIComponent(name)}?partition_id=${encodeURIComponent(partitionId)}`, {
+                    method: 'DELETE'
+                });
+                document.getElementById('legalTagMutationResult').innerHTML = `<div class="success compact-state"><strong>Legal Tag deleted:</strong> ${escapeHtml(name)}</div>`;
+                showToast('Legal Tag deleted', 'success');
+                addAudit('DELETE_LEGAL_TAG', name);
+                loadLegalTags(false);
+            } catch (error) {
+                legalTags = previousTags;
+                renderLegalTags();
+                document.getElementById('legalTagMutationResult').innerHTML = `<div class="error compact-state"><strong>Cannot delete Legal Tag:</strong> ${escapeHtml(error.message)}</div>`;
+                showToast(error.message || 'Current token cannot delete Legal Tags', 'error');
+            }
+        }
+
+        async function loadLegalTags(render = true) {
+            if (render) document.getElementById('legalTable').innerHTML = '<div class="skeleton-list"><span></span><span></span><span></span></div>';
+            try {
+                const data = await fetchJson(`/api/access-control/legal-tags?partition_id=${encodeURIComponent(partitionId)}`);
+                legalTags = data.items || [];
+                if (render) renderLegalTags();
+                if (render) addAudit('REFRESH_LEGAL_TAGS', `${legalTags.length} legal tags loaded`);
+            } catch (error) {
+                if (render) document.getElementById('legalTable').innerHTML = '<div class="error"><strong>Cannot load legal tags</strong><br><span>Check token, partition, or permission</span></div>';
+            } finally {
+                updateMetrics();
+            }
+        }
+
+        function renderLegalTags() {
+            const term = field('legalSearch').toLowerCase();
+            syncSelectOptions('legalStatusFilter', uniqueValues(legalTags.map((tag) => tag.status)), 'All statuses');
+            syncSelectOptions('legalCountryFilter', uniqueValues(legalTags.flatMap((tag) => tag.countryOfOrigin || [])), 'All countries');
+            const status = field('legalStatusFilter') || 'ALL';
+            const country = field('legalCountryFilter') || 'ALL';
+            const filtered = legalTags.filter((tag) => {
+                const matchesSearch = !term || JSON.stringify(tag).toLowerCase().includes(term);
+                const matchesStatus = status === 'ALL' || tag.status === status;
+                const matchesCountry = country === 'ALL' || (tag.countryOfOrigin || []).includes(country);
+                return matchesSearch && matchesStatus && matchesCountry;
+            });
+            document.getElementById('legalCount').textContent = `${filtered.length} / ${legalTags.length} tags`;
+            document.getElementById('legalTable').innerHTML = tableHtml(
+                ['Name', 'Countries', 'Contract', 'Status', 'Data Type', 'Classification', 'Description', 'Action'],
+                filtered.map((tag) => [
+                    escapeHtml(tag.name || ''),
+                    escapeHtml((tag.countryOfOrigin || []).join(', ')),
+                    escapeHtml(tag.contractId || ''),
+                    badge(tag.status || 'UNKNOWN'),
+                    escapeHtml(tag.dataType || ''),
+                    escapeHtml(tag.securityClassification || ''),
+                    escapeHtml(tag.description || ''),
+                    `<button class="btn btn-sm btn-danger" onclick='deleteLegalTag(${JSON.stringify(tag.name || '')})'>Delete</button>`
+                ])
+            );
+        }
+
+        function createAclPolicy(event) {
+            event.preventDefault();
+            const code = field('policyCode');
+            const viewersGroups = splitList(field('policyViewers'));
+            const ownersGroups = splitList(field('policyOwners'));
+            policies = policies.filter((policy) => policyKey(policy) !== code);
+            policies.push({
+                policyCode: code,
+                code,
+                name: field('policyName'),
+                partitionId: field('policyPartitionId') || partitionId,
+                domain: field('policyDomain'),
+                schemas: splitList(field('policySchemas')),
+                viewersGroups,
+                ownersGroups,
+                viewers: viewersGroups,
+                owners: ownersGroups,
+                defaultLegalTag: field('policyLegalTag'),
+                legalTag: field('policyLegalTag'),
+                countries: splitList(field('policyCountries')),
+                isDefault: false,
+                status: 'DRAFT'
+            });
+            writeStore('osdu_acl_policies', policies);
+            event.target.reset();
+            document.getElementById('policyPartitionId').value = partitionId;
+            document.getElementById('policyCountries').value = 'VN';
+            addAudit('CREATE_LOCAL_ACL_POLICY', code);
+            renderPolicies();
+            updateMetrics();
+        }
+
+        function renderPolicies() {
+            const search = field('policySearch').toLowerCase();
+            syncSelectOptions('policyPartitionFilter', uniqueValues(policies.map((policy) => policy.partitionId || partitionId)), 'All partitions');
+            syncSelectOptions('policyDomainFilter', uniqueValues(policies.map((policy) => policy.domain)), 'All domains');
+            syncSelectOptions('policyStatusFilter', uniqueValues(policies.map((policy) => policy.status)), 'All statuses');
+            const policyPartition = field('policyPartitionFilter') || 'ALL';
+            const domain = field('policyDomainFilter') || 'ALL';
+            const status = field('policyStatusFilter') || 'ALL';
+            const filtered = policies.filter((policy) => {
+                const matchesSearch = !search || JSON.stringify(policy).toLowerCase().includes(search);
+                const matchesPartition = policyPartition === 'ALL' || (policy.partitionId || partitionId) === policyPartition;
+                const matchesDomain = domain === 'ALL' || policy.domain === domain;
+                const matchesStatus = status === 'ALL' || policy.status === status;
+                return matchesSearch && matchesPartition && matchesDomain && matchesStatus;
+            });
+            document.getElementById('policyCount').textContent = `${filtered.length} / ${policies.length} policies`;
+            document.getElementById('policiesTable').innerHTML = tableHtml(
+                ['Code', 'Name', 'Partition', 'Domain', 'Schemas', 'Viewers', 'Owners', 'Legal Tag', 'Countries', 'Status'],
+                filtered.map((policy) => [
+                    escapeHtml(policyKey(policy)),
+                    escapeHtml(policy.name),
+                    escapeHtml(policy.partitionId || partitionId),
+                    escapeHtml(policy.domain || ''),
+                    escapeHtml(policyArray(policy, 'schemas').join(', ')),
+                    escapeHtml(policyArray(policy, 'viewersGroups', 'viewers').join(', ')),
+                    escapeHtml(policyArray(policy, 'ownersGroups', 'owners').join(', ')),
+                    escapeHtml(policy.defaultLegalTag || policy.legalTag || ''),
+                    escapeHtml(policyArray(policy, 'countries').join(', ')),
+                    badge(policy.status || 'DRAFT')
+                ])
+            );
+        }
+
+        async function checkAccess(event) {
+            event.preventDefault();
+            const result = document.getElementById('checkerResult');
+            result.innerHTML = '<div class="skeleton-list"><span></span><span></span></div>';
+            try {
+                const data = await fetchJson('/api/access-control/check', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        partition_id: partitionId,
+                        record_id: field('checkRecordId'),
+                        user_email: field('checkUserEmail'),
+                        action: field('checkAction'),
+                        user_groups: field('checkUserGroups'),
+                        scan_memberships: document.getElementById('scanMemberships').checked
+                    })
+                });
+                result.innerHTML = `
+                    <div class="decision-card ${data.result === 'ALLOW' ? 'allow' : 'deny'}">
+                        <span>${escapeHtml(data.action || 'view')}</span>
+                        <strong>${escapeHtml(data.result || 'UNKNOWN')}</strong>
+                        <p>${escapeHtml(data.explanation || '')}</p>
+                    </div>
+                    <div class="result-grid">
+                        ${resultBlock('Explanation layers', (data.layers || []).map((layer) => `${layer.name}: ${layer.status} - ${layer.detail}`))}
+                        ${resultBlock('Matched viewer groups', data.matchedViewerGroups)}
+                        ${resultBlock('Matched owner groups', data.matchedOwnerGroups)}
+                        ${resultBlock('Record ACL viewers', data.recordViewers)}
+                        ${resultBlock('Record ACL owners', data.recordOwners)}
+                        ${resultBlock('Legal tags/status', [...(data.recordLegalTags || []), data.recordLegalStatus || 'Not provided'])}
+                    </div>
+                `;
+                addAudit('RUN_ACCESS_CHECKER', field('checkRecordId'));
+            } catch (error) {
+                result.innerHTML = `<div class="error">${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        function renderAuditLogs() {
+            document.getElementById('auditTable').innerHTML = tableHtml(
+                ['Time', 'Action', 'Target'],
+                auditLogs.slice().reverse().map((item) => [escapeHtml(item.time), escapeHtml(item.action), escapeHtml(item.target)])
+            );
+            updateMetrics();
+        }
+
+        function clearAuditLogs() {
+            auditLogs = [];
+            writeStore('osdu_access_audit', auditLogs);
+            renderAuditLogs();
+        }
+
+        function addAudit(action, target) {
+            auditLogs.push({time: new Date().toISOString(), action, target});
+            auditLogs = auditLogs.slice(-200);
+            writeStore('osdu_access_audit', auditLogs);
+            updateMetrics();
+        }
+
+        function updateMetrics() {
+            document.getElementById('metricGroups').textContent = groups.length || '-';
+            document.getElementById('metricLegal').textContent = legalTags.length || '-';
+            document.getElementById('metricPartitions').textContent = partitions.length ? (partitions[0]?.status === 'CONFIGURED' ? partitionId : partitions.length) : 'Not available';
+            document.getElementById('metricPolicies').textContent = policies.length;
+            document.getElementById('metricAudit').textContent = auditLogs.length;
+            const userMetric = document.getElementById('metricUsers');
+            if (userMetric) userMetric.textContent = mergedUsers().length || 0;
+            if (document.getElementById('groupAllCount')) updateGroupSummary();
+        }
+
+        async function fetchJson(url, options) {
+            if (window.osduFetchJson) return window.osduFetchJson(url, options);
+            const response = await fetch(url, options);
+            const data = await response.json();
+            if (!response.ok || data.error) throw new Error(data.error || `Request failed: ${response.status} (${response.status})`);
+            return data;
+        }
+
+        function tableHtml(headers, rows) {
+            if (!rows.length) return '<div class="empty-state">No data</div>';
+            return `<div class="table-wrap"><table class="data-table admin-table"><thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+        }
+
+        function statusCards(items) {
+            return items.map(([label, value]) => `<div class="status-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+        }
+
+        function resultBlock(title, values) {
+            const items = (values || []).filter(Boolean);
+            return `<div class="result-block"><h3>${escapeHtml(title)}</h3>${items.length ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>None</p>'}</div>`;
+        }
+
+        function summaryItem(label, value) {
+            return `<div class="summary-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || '')}</strong></div>`;
+        }
+
+        function badge(value) {
+            const type = String(value || '').toLowerCase();
+            return `<span class="badge badge-${escapeHtml(type)}">${escapeHtml(value || '')}</span>`;
+        }
+
+        function splitList(value) {
+            return value.split(/[\s,;]+/).map((item) => item.trim()).filter(Boolean);
+        }
+
+        function policyKey(policy) {
+            return policy.policyCode || policy.code || '';
+        }
+
+        function policyArray(policy, primaryKey, fallbackKey) {
+            const value = policy[primaryKey] ?? (fallbackKey ? policy[fallbackKey] : undefined);
+            if (Array.isArray(value)) return value;
+            if (typeof value === 'string') return splitList(value);
+            return [];
+        }
+
+        function uniqueValues(values) {
+            return Array.from(new Set(
+                (values || [])
+                    .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+                    .map((value) => String(value))
+            )).sort((a, b) => a.localeCompare(b));
+        }
+
+        function syncSelectOptions(id, values, allLabel) {
+            const select = document.getElementById(id);
+            if (!select) return;
+            const current = select.value || 'ALL';
+            const normalizedValues = uniqueValues(values);
+            const options = [`<option value="ALL">${escapeHtml(allLabel || 'All')}</option>`]
+                .concat(normalizedValues.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`));
+            select.innerHTML = options.join('');
+            select.value = normalizedValues.includes(current) ? current : 'ALL';
+        }
+
+        function field(id) {
+            const input = document.getElementById(id);
+            return input ? input.value.trim() : '';
+        }
+
+        function readStore(key, fallback) {
+            try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; }
+        }
+
+        function writeStore(key, value) {
+            localStorage.setItem(key, JSON.stringify(value));
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+        }
+
+        function escapeJs(value) {
+            return String(value ?? '').replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\n', '\\n').replaceAll('\r', '');
+        }
+
+        function applyDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            if (initialRecordId) {
+                document.getElementById('checkRecordId').value = initialRecordId;
+                openAdminSection('checker');
+                return;
+            }
+            if (params.get('record_id')) {
+                document.getElementById('checkRecordId').value = params.get('record_id');
+                openAdminSection('checker');
+                return;
+            }
+            const userEmail = params.get('user_email') || params.get('user');
+            if (userEmail) {
+                openAdminSection('users');
+                document.getElementById('userSearch').value = userEmail;
+                document.getElementById('userInspectEmail').value = userEmail;
+                renderUsers();
+                loadUserGroups();
+                return;
+            }
+            const section = params.get('section') || initialSection;
+            if (section && section !== 'dashboard') openAdminSection(section);
+        }
+
+        window.addEventListener('osdu-auth-ready', () => refreshDashboard());
+        document.addEventListener('click', (event) => {
+            const picker = document.getElementById('userAddGroupPicker');
+            if (picker && !picker.contains(event.target)) hideGroupPicker();
+        });
+        renderUsers();
+        renderPolicies();
+        renderAuditLogs();
+        applyDeepLink();
+        if (initialAuthReady && !new URLSearchParams(window.location.search).get('section')) refreshDashboard();
+    </script>
+</body>
+</html>

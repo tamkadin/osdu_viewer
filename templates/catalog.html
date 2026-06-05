@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Catalog</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container app-shell fade-in">
+        {% include '_nav.html' %}
+        <div class="data-viewer-shell">
+            {% include '_data_viewer_sidebar.html' %}
+            <main class="data-viewer-main">
+                <header class="admin-topbar compact-page-head">
+                    <div>
+                        <span class="eyebrow">Data Catalog</span>
+                        <h1>OSDU Data Catalog</h1>
+                        <p>Domains. Kinds.</p>
+                    </div>
+                    <input type="text" class="search-input compact-search" placeholder="Search domain or kind" id="searchInput">
+                </header>
+
+                <div class="metric-grid metric-grid--compact">
+                    <div class="metric"><span>Domains</span><strong>{{ domains|length }}</strong></div>
+                    <div class="metric"><span>Kinds</span><strong>{{ total_entities }}</strong></div>
+                    <div class="metric"><span>Partition</span><strong>{{ active_partition or 'osdu' }}</strong></div>
+                </div>
+
+                <div class="domain-grid compact-card-grid" id="domainGrid">
+                    {% for domain_name, domain_info in domains.items() %}
+                    <a class="domain-card card compact-domain-card" href="/domain/{{ domain_name|urlencode }}">
+                        <div class="domain-icon">{{ domain_info.icon }}</div>
+                        <div>
+                            <div class="domain-title">{{ domain_name.replace(' Data', '').replace(' Domain', '') }}</div>
+                            <div class="domain-desc">{{ domain_info.entities|length }} kinds</div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            document.querySelectorAll('.domain-card').forEach(card => {
+                card.style.display = card.textContent.toLowerCase().includes(searchTerm) ? 'flex' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,55 +1,96 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ entity_name }} Records - OSDU</title>
+    <title>{{ entity_name }} Records - OSDU Data Catalog</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container fade-in">
-        <div class="breadcrumb">
-            <a href="/">🏠 Home</a> / 
-            <a href="/domain/{{ domain_name|urlencode }}">{{ domain_icon }} {{ domain_name }}</a> / 
-            {{ entity_name }}
+    <div class="container app-shell fade-in">
+        {% include '_nav.html' %}
+        <div class="data-viewer-shell">
+            {% include '_data_viewer_sidebar.html' %}
+            <main class="data-viewer-main">
+                <div class="breadcrumb">
+                    <a href="/">Home</a>
+                    <span>/</span>
+                    <a href="/data-catalog">Data Catalog</a>
+                    <span>/</span>
+                    <a href="/domain/{{ domain_name|urlencode }}">{{ domain_name }}</a>
+                    <span>/</span>
+                    <span>{{ entity_name }}</span>
+                </div>
+
+                <header class="admin-topbar">
+                    <div>
+                        <span class="eyebrow">Records</span>
+                        <h1>{{ entity_name }}</h1>
+                        <p><span id="totalCountInline">-</span> records · page <span id="currentPageInline">1</span></p>
+                    </div>
+                </header>
+
+                <div class="record-kind-banner">
+                    <span>Kind</span>
+                    <code>{{ entity_kind }}</code>
+                </div>
+
+                <div class="records-toolbar compact-toolbar">
+                    <label>
+                        Search records
+                        <input id="recordSearch" placeholder="Search records..." oninput="renderRecords()">
+                    </label>
+                    <label>
+                        Sort
+                        <select id="sortSelect" onchange="renderRecords()">
+                            <option value="display">Display name</option>
+                            <option value="id">Record id</option>
+                            <option value="version">Version</option>
+                            <option value="modified">Modified time</option>
+                        </select>
+                    </label>
+                    <label>
+                        Page size
+                        <select id="pageSizeSelect" onchange="loadRecords(0)">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </label>
+                    <button class="btn btn-primary" onclick="loadRecords(currentOffset)">Refresh</button>
+                    <button class="btn" onclick="exportJSON()">Export</button>
+                    <button class="btn" onclick="toggleSelectAll()" id="selectAllBtn" disabled>Select All</button>
+                    <button class="btn btn-danger" onclick="openDeleteSelectedModal()" id="deleteSelectedBtn" disabled>Delete</button>
+                </div>
+
+                <div class="record-stat-line">
+                    <span><strong id="loadedCount">-</strong> loaded</span>
+                    <span><strong id="selectedCount">0</strong> selected</span>
+                </div>
+
+                <div id="recordList" class="record-grid">
+                    <div class="skeleton-list"><span></span><span></span><span></span></div>
+                </div>
+
+                <div id="pagination" class="pagination"></div>
+            </main>
         </div>
-        
-        <h1 class="page-title">{{ entity_name }}</h1>
-        <p><strong>Mô tả:</strong> {{ entity_description }}</p>
-        
-        <div class="controls">
-            <input type="number" id="limitInput" value="50" min="1" max="1000" placeholder="Limit" title="Số lượng record hiển thị">
-            <select id="fieldsSelect" title="Dữ liệu hiển thị">
-                <option value="">Tên hiển thị</option>
-                <option value="basic">Tất cả dữ liệu</option>
-            </select>
-            <button class="btn btn-primary" onclick="loadRecords()">🔄 Reload</button>
-            <button class="btn" onclick="exportJSON()">💾 Export JSON</button>
-            <button class="btn btn-secondary" onclick="toggleSelectAll()" id="selectAllBtn" style="display:none;">☑️ Select All</button>
-            <button class="btn btn-danger" onclick="deleteSelected()" id="deleteSelectedBtn" style="display:none; background:#dc3545;">🗑️ Delete Selected</button>
-            <span id="totalCount" class="stat-label"></span>
-            <span id="selectedCount" class="stat-label" style="display:none; color:#dc3545; font-weight:bold;"></span>
-        </div>
-        
-        <div class="stats" id="statsContainer" style="display: none;">
-            <div class="stat-card">
-                <div class="stat-value" id="recordCount">0</div>
-                <div class="stat-label">Records</div>
+    </div>
+
+    <div class="confirm-modal is-hidden" id="bulkDeleteModal" role="dialog" aria-modal="true">
+        <div class="confirm-modal__panel">
+            <h2>Confirm Delete</h2>
+            <p>Delete <strong id="bulkDeleteCount">0</strong> selected record(s).</p>
+            <label>
+                Type DELETE to confirm
+                <input id="bulkDeleteConfirm" placeholder="DELETE">
+            </label>
+            <div class="confirm-modal__actions">
+                <button class="btn" onclick="closeDeleteSelectedModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="deleteSelected()">Confirm Delete</button>
             </div>
-            <div class="stat-card">
-                <div class="stat-value" id="currentPage">1</div>
-                <div class="stat-label">Page</div>
-            </div>
+            <p class="muted" id="bulkDeleteMessage"></p>
         </div>
-        
-        <div id="recordList" class="record-list">
-            <div class="loading">
-                <div class="spinner"></div>
-                Loading records...
-            </div>
-        </div>
-        
-        <div id="pagination" class="pagination"></div>
     </div>
 
     <script>
@@ -59,371 +100,194 @@
         let allRecords = [];
         let selectedRecords = new Set();
         let selectAllState = false;
-        
+
         async function loadRecords(offset = 0) {
             currentOffset = offset;
-            currentLimit = parseInt(document.getElementById('limitInput').value) || 50;
-            
+            currentLimit = parseInt(document.getElementById('pageSizeSelect').value, 10) || 50;
             selectedRecords.clear();
             selectAllState = false;
-            
-            const recordList = document.getElementById('recordList');
-            recordList.innerHTML = '<div class="loading"><div class="spinner"></div>Loading records...</div>';
-            
+            updateSelectedUi();
+            document.getElementById('recordList').innerHTML = '<div class="skeleton-list"><span></span><span></span><span></span></div>';
             try {
-                const fieldsSelect = document.getElementById('fieldsSelect').value;
-                let url = `/api/records/{{ domain_name|urlencode }}/{{ entity_name|urlencode }}?limit=${currentLimit}&offset=${currentOffset}`;
-                
-                if (fieldsSelect && fieldsSelect !== '') {
-                    url += `&fields=${fieldsSelect}`;
-                }
-                
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data.error) {
-                    recordList.innerHTML = `<div class="error">❌ Error: ${data.error}</div>`;
-                    return;
-                }
-                
+                const url = `/api/records/{{ domain_name|urlencode }}/{{ entity_name|urlencode }}?limit=${currentLimit}&offset=${currentOffset}&fields=basic`;
+                const data = await window.osduFetchJson(url);
                 totalCount = data.totalCount || 0;
                 allRecords = data.results || [];
-                
-                document.getElementById('totalCount').textContent = `Total: ${totalCount} records`;
-                document.getElementById('recordCount').textContent = totalCount;
-                document.getElementById('currentPage').textContent = Math.floor(currentOffset / currentLimit) + 1;
-                document.getElementById('statsContainer').style.display = 'grid';
-                
-                if (allRecords.length === 0) {
-                    recordList.innerHTML = '<div class="loading">📭 No records found</div>';
-                    document.getElementById('selectAllBtn').style.display = 'none';
-                    document.getElementById('deleteSelectedBtn').style.display = 'none';
-                    return;
-                }
-                
-                renderRecords(allRecords);
+                document.getElementById('totalCountInline').textContent = totalCount;
+                document.getElementById('loadedCount').textContent = allRecords.length;
+                document.getElementById('currentPageInline').textContent = Math.floor(currentOffset / currentLimit) + 1;
+                renderRecords();
                 updatePagination();
-                
             } catch (error) {
-                recordList.innerHTML = `<div class="error">❌ Error loading records: ${error.message}</div>`;
+                document.getElementById('recordList').innerHTML = '<div class="error"><strong>Cannot load records</strong><br><span>Check token, partition, or permission</span></div>';
             }
         }
-        
-        function getDisplayName(record, entityName) {
-            if (!record.data) return record.id;
-            
-            // Helper function to extract nested properties like "VirtualProperties.DefaultName"
-            function getNestedProperty(obj, path) {
-                return path.split('.').reduce((current, part) => 
-                    current && typeof current === 'object' ? current[part] : null, obj);
-            }
-            
-            // 1. Try OSDU standard VirtualProperties.DefaultName first
-            const virtualName = getNestedProperty(record.data, 'VirtualProperties.DefaultName');
-            if (virtualName && typeof virtualName === 'string' && virtualName.length > 0) {
-                return virtualName;
-            }
-            
-            // 2. Try pattern-based detection: {EntityType}Name
-            // e.g., "Basin" -> "BasinName", "Field" -> "FieldName"
-            if (entityName) {
-                const patternField = `${entityName}Name`;
-                if (record.data[patternField] && typeof record.data[patternField] === 'string') {
-                    return record.data[patternField];
-                }
-            }
-            
-            // 3. Try common name field variations ending with "Name"
-            const nameFieldCandidates = Object.keys(record.data).filter(key => 
-                key.endsWith('Name') && typeof record.data[key] === 'string' && record.data[key].length > 0
-            );
-            if (nameFieldCandidates.length > 0) {
-                return record.data[nameFieldCandidates[0]];
-            }
-            
-            // 4. Try generic name fields
-            const genericFields = ['Name', 'name', 'Title', 'title', 'Label', 'label'];
-            for (let field of genericFields) {
-                if (record.data[field] && typeof record.data[field] === 'string' && record.data[field].length > 0) {
-                    return record.data[field];
-                }
-            }
-            
-            // 5. Fallback: try first non-system string field (skip fields starting with underscore or containing dates)
-            const skipPatterns = /^_|Date$|CreatedAt|UpdatedAt|Timestamp|Version|^id$/i;
-            for (let key in record.data) {
-                if (!skipPatterns.test(key) && 
-                    typeof record.data[key] === 'string' && 
-                    record.data[key].length > 0 &&
-                    record.data[key].length < 100) { // Skip very long strings (likely descriptions)
-                    return record.data[key];
-                }
-            }
-            
-            // 6. Last resort: extract ID suffix
-            return record.id.split(':').pop() || record.id;
-        }
-        
-        function renderRecords(records) {
+
+        function renderRecords() {
             const recordList = document.getElementById('recordList');
-            const fieldsSelect = document.getElementById('fieldsSelect').value;
-            
-            recordList.innerHTML = '';
-            
-            document.getElementById('selectAllBtn').style.display = 'inline-block';
-            document.getElementById('deleteSelectedBtn').style.display = 'inline-block';
-            updateSelectedCount();
-            
-            records.forEach((record, index) => {
-                const div = document.createElement('div');
-                div.className = 'record-item card';
-                div.style.animationDelay = `${index * 0.05}s`;
-                div.classList.add('fade-in');
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.className = 'record-checkbox';
-                checkbox.checked = selectedRecords.has(record.id);
-                checkbox.onclick = (e) => {
-                    e.stopPropagation();
-                    toggleRecordSelection(record.id);
-                };
-                checkbox.style.cssText = 'position:absolute; top:10px; left:10px; width:20px; height:20px; cursor:pointer; z-index:10;';
-                
-                div.style.position = 'relative';
-                div.style.paddingLeft = '40px';
-                div.onclick = () => viewRecord(record.id);
-                div.appendChild(checkbox);
-                
-                const displayName = getDisplayName(record, '{{ entity_name }}');
-                
-                const contentDiv = document.createElement('div');
-                if (fieldsSelect === 'basic') {
-                    let jsonPreview = '';
-                    if (record.data && Object.keys(record.data).length > 0) {
-                        const previewData = {};
-                        const dataKeys = Object.keys(record.data).slice(0, 3);
-                        dataKeys.forEach(key => {
-                            previewData[key] = record.data[key];
-                        });
-                        jsonPreview = `<div class="record-preview"><pre>${JSON.stringify(previewData, null, 2)}</pre></div>`;
-                    }
-                    
-                    contentDiv.innerHTML = `
-                        <div class="record-name">📄 ${displayName}</div>
-                        <div class="record-kind-small">${record.kind || ''}</div>
-                        ${jsonPreview}
-                    `;
-                } else {
-                    contentDiv.innerHTML = `
-                        <div class="record-name-large">📄 ${displayName}</div>
-                        <div class="record-subtitle">Click để xem chi tiết</div>
-                    `;
-                }
-                
-                div.appendChild(contentDiv);
-                recordList.appendChild(div);
-            });
-        }
-        
-        function toggleRecordSelection(recordId) {
-            if (selectedRecords.has(recordId)) {
-                selectedRecords.delete(recordId);
-            } else {
-                selectedRecords.add(recordId);
+            let records = allRecords.slice();
+            const term = document.getElementById('recordSearch').value.toLowerCase();
+            if (term) {
+                records = records.filter((record) => JSON.stringify(record).toLowerCase().includes(term));
             }
-            updateSelectedCount();
+            records.sort(compareRecords);
+            if (!records.length) {
+                recordList.innerHTML = '<div class="empty-state">No records found</div>';
+                document.getElementById('selectAllBtn').disabled = true;
+                return;
+            }
+            document.getElementById('selectAllBtn').disabled = false;
+            recordList.innerHTML = records.map(recordCardHtml).join('');
         }
-        
+
+        function recordCardHtml(record) {
+            const displayName = getDisplayName(record, '{{ entity_name }}');
+            const version = record.version || record.meta?.version || '-';
+            const acl = record.acl || {};
+            const legal = record.legal || {};
+            const viewers = (acl.viewers || []).length;
+            const owners = (acl.owners || []).length;
+            const legalTags = legal.legaltags || legal.legalTags || [];
+            const checked = selectedRecords.has(record.id) ? 'checked' : '';
+            const idJson = JSON.stringify(record.id || '');
+            return `
+                <article class="record-card card" onclick="viewRecord('${encodeURIComponent(record.id)}')">
+                    <div class="record-card__top">
+                        <label class="record-card__check" onclick="event.stopPropagation()">
+                            <input type="checkbox" ${checked} onchange='toggleRecordSelection(${idJson})'>
+                        </label>
+                        <span class="badge badge-blue">v${escapeHtml(version)}</span>
+                    </div>
+                    <h3>${escapeHtml(displayName)}</h3>
+                    <p class="muted break-text">${escapeHtml(shortId(record.id || ''))}</p>
+                    <div class="card-meta-row">
+                        <span>${escapeHtml(shortKind(record.kind || ''))}</span>
+                        <span>viewers ${viewers}</span>
+                        <span>owners ${owners}</span>
+                        ${getModifiedTime(record) ? `<span>${escapeHtml(getModifiedTime(record))}</span>` : ''}
+                    </div>
+                    <div class="record-card__footer">
+                        ${legalTags.length ? legalTags.slice(0, 2).map((tag) => `<span class="badge badge-blue">${escapeHtml(tag)}</span>`).join(' ') : '<span class="muted">No legal tags</span>'}
+                    </div>
+                </article>
+            `;
+        }
+
+        function compareRecords(a, b) {
+            const sort = document.getElementById('sortSelect').value;
+            if (sort === 'id') return String(a.id || '').localeCompare(String(b.id || ''));
+            if (sort === 'version') return Number(b.version || 0) - Number(a.version || 0);
+            if (sort === 'modified') return String(getModifiedTime(b)).localeCompare(String(getModifiedTime(a)));
+            return getDisplayName(a, '{{ entity_name }}').localeCompare(getDisplayName(b, '{{ entity_name }}'));
+        }
+
+        function getDisplayName(record, entityName) {
+            const data = record.data || {};
+            const nested = (obj, path) => path.split('.').reduce((current, part) => current && typeof current === 'object' ? current[part] : null, obj);
+            const virtualName = nested(data, 'VirtualProperties.DefaultName');
+            if (virtualName) return virtualName;
+            const patternField = `${entityName}Name`;
+            if (data[patternField]) return data[patternField];
+            const nameKey = Object.keys(data).find((key) => key.endsWith('Name') && typeof data[key] === 'string' && data[key]);
+            if (nameKey) return data[nameKey];
+            for (const field of ['Name', 'name', 'Title', 'title']) {
+                if (data[field]) return data[field];
+            }
+            return (record.id || '').split(':').pop() || record.id || 'Unnamed record';
+        }
+
+        function getModifiedTime(record) {
+            return record.modifyTime || record.modifiedTime || record.meta?.modifyTime || record.meta?.modifiedTime || record.createTime || record.createTime || '';
+        }
+
+        function toggleRecordSelection(recordId) {
+            if (selectedRecords.has(recordId)) selectedRecords.delete(recordId);
+            else selectedRecords.add(recordId);
+            updateSelectedUi();
+            renderRecords();
+        }
+
         function toggleSelectAll() {
             selectAllState = !selectAllState;
-            
-            if (selectAllState) {
-                allRecords.forEach(record => selectedRecords.add(record.id));
-                document.getElementById('selectAllBtn').innerHTML = '☐ Deselect All';
-            } else {
-                selectedRecords.clear();
-                document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
-            }
-            
-            document.querySelectorAll('.record-checkbox').forEach((checkbox, index) => {
-                checkbox.checked = selectAllState;
-            });
-            
-            updateSelectedCount();
+            if (selectAllState) allRecords.forEach((record) => selectedRecords.add(record.id));
+            else selectedRecords.clear();
+            updateSelectedUi();
+            renderRecords();
         }
-        
-        function updateSelectedCount() {
+
+        function updateSelectedUi() {
             const count = selectedRecords.size;
-            const countEl = document.getElementById('selectedCount');
-            
-            if (count > 0) {
-                countEl.textContent = `Selected: ${count}`;
-                countEl.style.display = 'inline';
-            } else {
-                countEl.style.display = 'none';
-            }
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('deleteSelectedBtn').disabled = count === 0;
+            document.getElementById('selectAllBtn').textContent = selectAllState ? 'Deselect All' : 'Select All';
         }
-        
+
+        function openDeleteSelectedModal() {
+            if (!selectedRecords.size) return;
+            document.getElementById('bulkDeleteCount').textContent = selectedRecords.size;
+            document.getElementById('bulkDeleteConfirm').value = '';
+            document.getElementById('bulkDeleteMessage').textContent = '';
+            document.getElementById('bulkDeleteModal').classList.remove('is-hidden');
+        }
+
+        function closeDeleteSelectedModal() {
+            document.getElementById('bulkDeleteModal').classList.add('is-hidden');
+        }
+
         async function deleteSelected() {
-            if (selectedRecords.size === 0) {
-                alert('⚠️ Please select at least one record to delete');
+            if (document.getElementById('bulkDeleteConfirm').value !== 'DELETE') {
+                document.getElementById('bulkDeleteMessage').textContent = 'Type DELETE to confirm.';
                 return;
             }
-            
             const recordIds = Array.from(selectedRecords);
-            
-            if (!confirm(`⚠️ Are you sure you want to delete ${recordIds.length} record(s)?\n\nThis will perform a soft delete (individual loop). Records may be recoverable depending on your OSDU configuration.\n\nNote: Each record will be deleted individually. This may take time if the server is slow. Please be patient.`)) {
-                return;
-            }
-            
-            const deleteBtn = document.getElementById('deleteSelectedBtn');
-            const originalText = deleteBtn.innerHTML;
-            deleteBtn.disabled = true;
-            
-            let processed = 0;
-            const updateProgress = () => {
-                deleteBtn.innerHTML = `⏳ Deleting ${processed}/${recordIds.length}...`;
-            };
-            updateProgress();
-            
-            const progressInterval = setInterval(() => {
-                processed = Math.min(processed + 1, recordIds.length);
-                updateProgress();
-            }, 2000);
-            
+            const message = document.getElementById('bulkDeleteMessage');
+            message.textContent = `Deleting ${recordIds.length} record(s)...`;
             try {
                 const response = await fetch('/api/bulk-delete-records', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ record_ids: recordIds })
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({record_ids: recordIds})
                 });
-                
-                clearInterval(progressInterval);
                 const result = await response.json();
-                
-                if (result.success && result.failed_count === 0) {
-                    alert(`✅ Successfully deleted all ${result.count} record(s)!`);
-                    selectedRecords.clear();
-                    selectAllState = false;
-                    document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
-                    deleteBtn.innerHTML = originalText;
-                    deleteBtn.disabled = false;
-                    loadRecords(currentOffset);
-                } else if (result.success && result.failed_count > 0) {
-                    let msg = `⚠️ Partial success:\n✅ Deleted: ${result.count}\n❌ Failed: ${result.failed_count}`;
-                    if (result.errors && result.errors.length > 0) {
-                        msg += '\n\nFirst errors:\n' + result.errors.slice(0, 3).join('\n');
-                    }
-                    alert(msg);
-                    selectedRecords.clear();
-                    selectAllState = false;
-                    document.getElementById('selectAllBtn').innerHTML = '☑️ Select All';
-                    deleteBtn.innerHTML = originalText;
-                    deleteBtn.disabled = false;
-                    loadRecords(currentOffset);
-                } else {
-                    let errorMsg = '❌ Delete failed: ' + (result.error || 'Unknown error');
-                    if (result.errors && result.errors.length > 0) {
-                        errorMsg += '\n\nErrors:\n' + result.errors.slice(0, 3).join('\n');
-                    }
-                    alert(errorMsg);
-                    deleteBtn.disabled = false;
-                    deleteBtn.innerHTML = originalText;
+                if (response.status === 401) {
+                    window.osduRedirectToConnect();
+                    return;
                 }
-                
+                if (!response.ok || !result.success) throw new Error(result.error || 'Delete failed');
+                closeDeleteSelectedModal();
+                selectedRecords.clear();
+                await loadRecords(currentOffset);
             } catch (error) {
-                clearInterval(progressInterval);
-                alert('❌ Network error: ' + error.message);
-                deleteBtn.disabled = false;
-                deleteBtn.innerHTML = originalText;
+                message.textContent = error.message;
             }
         }
-        
+
         function updatePagination() {
             const pagination = document.getElementById('pagination');
             pagination.innerHTML = '';
-            
-            const totalPages = Math.ceil(totalCount / currentLimit);
             const currentPage = Math.floor(currentOffset / currentLimit) + 1;
-            
+            const totalPages = Math.ceil(totalCount / currentLimit);
             if (totalPages <= 1) return;
-            
-            // Previous button
-            if (currentPage > 1) {
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.innerHTML = '‹ Previous';
-                btn.onclick = () => loadRecords((currentPage - 2) * currentLimit);
-                pagination.appendChild(btn);
-            }
-            
-            // Page numbers
-            const startPage = Math.max(1, currentPage - 2);
-            const endPage = Math.min(totalPages, currentPage + 2);
-            
-            if (startPage > 1) {
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = '1';
-                btn.onclick = () => loadRecords(0);
-                pagination.appendChild(btn);
-                
-                if (startPage > 2) {
-                    const span = document.createElement('span');
-                    span.textContent = '...';
-                    span.className = 'btn';
-                    pagination.appendChild(span);
-                }
-            }
-            
-            for (let i = startPage; i <= endPage; i++) {
-                const btn = document.createElement('button');
-                btn.className = i === currentPage ? 'btn btn-primary active' : 'btn';
-                btn.textContent = i;
-                btn.onclick = () => loadRecords((i - 1) * currentLimit);
-                pagination.appendChild(btn);
-            }
-            
-            if (endPage < totalPages) {
-                if (endPage < totalPages - 1) {
-                    const span = document.createElement('span');
-                    span.textContent = '...';
-                    span.className = 'btn';
-                    pagination.appendChild(span);
-                }
-                
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.textContent = totalPages;
-                btn.onclick = () => loadRecords((totalPages - 1) * currentLimit);
-                pagination.appendChild(btn);
-            }
-            
-            // Next button
-            if (currentPage < totalPages) {
-                const btn = document.createElement('button');
-                btn.className = 'btn';
-                btn.innerHTML = 'Next ›';
-                btn.onclick = () => loadRecords(currentPage * currentLimit);
-                pagination.appendChild(btn);
-            }
+            if (currentPage > 1) pagination.appendChild(pageButton('Previous', (currentPage - 2) * currentLimit));
+            pagination.appendChild(document.createTextNode(` Page ${currentPage} of ${totalPages} `));
+            if (currentPage < totalPages) pagination.appendChild(pageButton('Next', currentPage * currentLimit));
         }
-        
-        function viewRecord(recordId) {
-            window.location.href = '/record/' + encodeURIComponent(recordId);
+
+        function pageButton(label, offset) {
+            const button = document.createElement('button');
+            button.className = 'btn';
+            button.textContent = label;
+            button.onclick = () => loadRecords(offset);
+            return button;
         }
-        
+
+        function viewRecord(encodedRecordId) {
+            window.location.href = '/record/' + encodedRecordId;
+        }
+
         function exportJSON() {
-            if (allRecords.length === 0) {
-                alert('Không có dữ liệu để xuất');
-                return;
-            }
-            
-            const dataStr = JSON.stringify(allRecords, null, 2);
-            const blob = new Blob([dataStr], {type: 'application/json'});
+            if (!allRecords.length) return;
+            const blob = new Blob([JSON.stringify(allRecords, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -433,132 +297,22 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         }
-        
-        // Event listeners
-        document.getElementById('fieldsSelect').addEventListener('change', () => loadRecords());
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'r' && e.ctrlKey) {
-                e.preventDefault();
-                loadRecords();
-            }
-        });
-        
-        // Load initial records
+
+        function shortId(value) {
+            const text = String(value || '');
+            return text.length > 46 ? `${text.slice(0, 26)}...${text.slice(-14)}` : text;
+        }
+
+        function shortKind(value) {
+            const text = String(value || '');
+            return text.replace(/^osdu:/, '').replace(/:\*$/, '');
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+        }
+
         loadRecords();
     </script>
-    
-    <style>
-        .field-preview {
-            color: #6c757d;
-            font-size: 0.85em;
-        }
-        
-        .record-preview {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid #e9ecef;
-        }
-        
-        .record-preview pre {
-            font-size: 0.75em;
-            font-family: 'Courier New', monospace;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            margin: 0;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            max-height: 100px;
-            overflow-y: auto;
-        }
-        
-        code {
-            background: #f8f9fa;
-            padding: 2px 4px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 0.9em;
-        }
-        
-        .record-name-large {
-            font-size: 1.2em;
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 8px;
-        }
-        
-        .record-subtitle {
-            color: #6c757d;
-            font-size: 0.9em;
-            font-style: italic;
-        }
-        
-        .record-kind-small {
-            color: #6c757d;
-            font-size: 0.8em;
-            margin-bottom: 4px;
-        }
-        
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .data-table th {
-            background: #f8f9fa;
-            padding: 12px 8px;
-            text-align: left;
-            font-weight: 600;
-            border-bottom: 2px solid #e9ecef;
-            color: #495057;
-            font-size: 0.85em;
-            max-width: 150px;
-            word-wrap: break-word;
-        }
-        
-        .data-table td {
-            padding: 10px 8px;
-            border-bottom: 1px solid #e9ecef;
-            font-size: 0.85em;
-            max-width: 150px;
-            word-wrap: break-word;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .data-table tbody tr:hover {
-            background: #f8f9fa;
-        }
-        
-        .data-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-        
-        .btn-sm {
-            padding: 4px 8px;
-            font-size: 0.8em;
-            border-radius: 4px;
-        }
-        
-        @media (max-width: 768px) {
-            .data-table {
-                font-size: 0.75em;
-            }
-            
-            .data-table th,
-            .data-table td {
-                padding: 6px 4px;
-                max-width: 80px;
-            }
-        }
-    </style>
 </body>
 </html>
